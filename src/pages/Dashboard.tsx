@@ -11,7 +11,8 @@ import {
   UserPlus,
   List,
   FileText,
-  TrendingUp
+  TrendingUp,
+  PiggyBank
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -20,14 +21,11 @@ export default function Dashboard() {
 
   const activeTenants = tenants.filter(t => t.is_active);
   const totalPending = activeTenants.reduce((sum, t) => sum + (t.pending_amount || 0), 0);
+  const totalExtraBalance = activeTenants.reduce((sum, t) => sum + (t.extra_balance || 0), 0);
   const defaulters = activeTenants.filter(t => (t.pending_amount || 0) > 0);
   
-  // Current month collection
-  const now = new Date();
-  const currentMonthPaid = activeTenants.reduce((sum, t) => {
-    // Approximation: total_paid is cumulative, so we just show total collected
-    return sum + (t.total_paid || 0);
-  }, 0);
+  // Total collected
+  const totalCollected = activeTenants.reduce((sum, t) => sum + (t.total_paid || 0), 0);
 
   if (isLoading) {
     return (
@@ -55,7 +53,7 @@ export default function Dashboard() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -65,7 +63,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-success">
-                ₹{currentMonthPaid.toLocaleString('en-IN')}
+                ₹{totalCollected.toLocaleString('en-IN')}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 All time collection
@@ -86,6 +84,23 @@ export default function Dashboard() {
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Outstanding amount
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Extra Balance
+              </CardTitle>
+              <PiggyBank className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-primary">
+                ₹{totalExtraBalance.toLocaleString('en-IN')}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Advance payments
               </p>
             </CardContent>
           </Card>

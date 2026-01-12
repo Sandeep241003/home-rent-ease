@@ -3,8 +3,11 @@ import { Layout } from '@/components/Layout';
 import { useTenants } from '@/hooks/useTenants';
 import { usePayments } from '@/hooks/usePayments';
 import { useElectricity } from '@/hooks/useElectricity';
+import { useActivityLog } from '@/hooks/useActivityLog';
+import { ActivityTimeline } from '@/components/ActivityTimeline';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -20,9 +23,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { format } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { History, FileSpreadsheet, PiggyBank } from 'lucide-react';
 
 interface MonthlyRentEntry {
   id: string;
@@ -54,6 +57,7 @@ export default function Ledger() {
 
   const { payments } = usePayments();
   const { readings } = useElectricity();
+  const { logs: allLogs } = useActivityLog();
 
   if (tenantsLoading) {
     return (
@@ -70,6 +74,17 @@ export default function Ledger() {
   const filteredTenants = selectedTenantId === 'all' 
     ? activeTenants 
     : activeTenants.filter(t => t.id === selectedTenantId);
+
+  // Filter logs
+  const filteredLogs = selectedTenantId === 'all' 
+    ? allLogs 
+    : allLogs.filter(l => l.tenant_id === selectedTenantId);
+
+  // Build tenant names map
+  const tenantNames: Record<string, string> = {};
+  tenants.forEach(t => {
+    tenantNames[t.id] = `${t.name} (Room ${t.room_number})`;
+  });
 
   const getMonthName = (month: number) => {
     return new Date(2000, month - 1).toLocaleString('en-IN', { month: 'long' });
@@ -132,7 +147,7 @@ export default function Ledger() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Ledger</h1>
             <p className="text-muted-foreground">
-              Month-wise payment records
+              Complete financial records and activity history
             </p>
           </div>
           <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
@@ -150,84 +165,125 @@ export default function Ledger() {
           </Select>
         </div>
 
-        {filteredTenants.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center text-muted-foreground">
-              No active tenants found
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-6">
-            {filteredTenants.map((tenant) => {
-              const { months } = getLedgerData(tenant.id);
-              
-              return (
-                <Card key={tenant.id}>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-lg">
-                        {tenant.name} - Room {tenant.room_number}
-                      </CardTitle>
-                      <Badge variant={tenant.pending_amount > 0 ? 'destructive' : 'default'}>
-                        Pending: ₹{tenant.pending_amount.toLocaleString('en-IN')}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {months.length === 0 ? (
-                      <p className="text-muted-foreground text-center py-4">
-                        No records yet
-                      </p>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Month</TableHead>
-                              <TableHead className="text-right">Rent</TableHead>
-                              <TableHead className="text-right">Electricity</TableHead>
-                              <TableHead className="text-right">Total Due</TableHead>
-                              <TableHead className="text-right">Paid</TableHead>
-                              <TableHead className="text-right">Balance</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {months.map((m) => {
-                              const totalDue = m.rent + m.electricity;
-                              const balance = totalDue - m.paid;
-                              return (
-                                <TableRow key={`${m.year}-${m.month}`}>
-                                  <TableCell className="font-medium">
-                                    {getMonthName(m.month)} {m.year}
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    ₹{m.rent.toLocaleString('en-IN')}
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    ₹{m.electricity.toLocaleString('en-IN')}
-                                  </TableCell>
-                                  <TableCell className="text-right font-medium">
-                                    ₹{totalDue.toLocaleString('en-IN')}
-                                  </TableCell>
-                                  <TableCell className="text-right text-success">
-                                    ₹{m.paid.toLocaleString('en-IN')}
-                                  </TableCell>
-                                  <TableCell className={`text-right font-semibold ${balance > 0 ? 'text-destructive' : 'text-success'}`}>
-                                    ₹{balance.toLocaleString('en-IN')}
-                                  </TableCell>
+        <Tabs defaultValue="history">
+          <TabsList>
+            <TabsTrigger value="history" className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              Activity Log
+            </TabsTrigger>
+            <TabsTrigger value="ledger" className="flex items-center gap-2">
+              <FileSpreadsheet className="h-4 w-4" />
+              Month-wise Ledger
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="history" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <History className="h-5 w-5" />
+                  Complete Activity History
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ActivityTimeline 
+                  logs={filteredLogs} 
+                  showTenantName={selectedTenantId === 'all'}
+                  tenantNames={tenantNames}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="ledger" className="mt-6">
+            {filteredTenants.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  No active tenants found
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-6">
+                {filteredTenants.map((tenant) => {
+                  const { months } = getLedgerData(tenant.id);
+                  
+                  return (
+                    <Card key={tenant.id}>
+                      <CardHeader className="pb-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <CardTitle className="text-lg">
+                            {tenant.name} - Room {tenant.room_number}
+                          </CardTitle>
+                          <div className="flex gap-2">
+                            <Badge variant={tenant.pending_amount > 0 ? 'destructive' : 'default'}>
+                              Pending: ₹{tenant.pending_amount.toLocaleString('en-IN')}
+                            </Badge>
+                            {(tenant.extra_balance || 0) > 0 && (
+                              <Badge variant="outline" className="flex items-center gap-1">
+                                <PiggyBank className="h-3 w-3" />
+                                Extra: ₹{tenant.extra_balance.toLocaleString('en-IN')}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        {months.length === 0 ? (
+                          <p className="text-muted-foreground text-center py-4">
+                            No records yet
+                          </p>
+                        ) : (
+                          <div className="overflow-x-auto">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Month</TableHead>
+                                  <TableHead className="text-right">Rent</TableHead>
+                                  <TableHead className="text-right">Electricity</TableHead>
+                                  <TableHead className="text-right">Total Due</TableHead>
+                                  <TableHead className="text-right">Paid</TableHead>
+                                  <TableHead className="text-right">Balance</TableHead>
                                 </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
+                              </TableHeader>
+                              <TableBody>
+                                {months.map((m) => {
+                                  const totalDue = m.rent + m.electricity;
+                                  const balance = totalDue - m.paid;
+                                  return (
+                                    <TableRow key={`${m.year}-${m.month}`}>
+                                      <TableCell className="font-medium">
+                                        {getMonthName(m.month)} {m.year}
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        ₹{m.rent.toLocaleString('en-IN')}
+                                      </TableCell>
+                                      <TableCell className="text-right">
+                                        ₹{m.electricity.toLocaleString('en-IN')}
+                                      </TableCell>
+                                      <TableCell className="text-right font-medium">
+                                        ₹{totalDue.toLocaleString('en-IN')}
+                                      </TableCell>
+                                      <TableCell className="text-right text-success">
+                                        ₹{m.paid.toLocaleString('en-IN')}
+                                      </TableCell>
+                                      <TableCell className={`text-right font-semibold ${balance > 0 ? 'text-destructive' : 'text-success'}`}>
+                                        ₹{balance.toLocaleString('en-IN')}
+                                      </TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </Layout>
   );

@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_log: {
+        Row: {
+          amount: number | null
+          created_at: string
+          description: string
+          event_type: string
+          id: string
+          tenant_id: string
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          description: string
+          event_type: string
+          id?: string
+          tenant_id: string
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          description?: string
+          event_type?: string
+          id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_log_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       electricity_readings: {
         Row: {
           bill_amount: number
@@ -160,9 +195,12 @@ export type Database = {
       }
       tenants: {
         Row: {
+          aadhaar_image_url: string | null
           created_at: string | null
           current_meter_reading: number
           electricity_rate: number
+          extra_balance: number
+          gender: string | null
           id: string
           initial_meter_reading: number
           is_active: boolean | null
@@ -170,6 +208,7 @@ export type Database = {
           landlord_id: string
           monthly_rent: number
           name: string
+          occupation: string | null
           pending_amount: number
           phone: string
           room_number: string
@@ -177,9 +216,12 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          aadhaar_image_url?: string | null
           created_at?: string | null
           current_meter_reading?: number
           electricity_rate?: number
+          extra_balance?: number
+          gender?: string | null
           id?: string
           initial_meter_reading?: number
           is_active?: boolean | null
@@ -187,6 +229,7 @@ export type Database = {
           landlord_id: string
           monthly_rent?: number
           name: string
+          occupation?: string | null
           pending_amount?: number
           phone: string
           room_number: string
@@ -194,9 +237,12 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          aadhaar_image_url?: string | null
           created_at?: string | null
           current_meter_reading?: number
           electricity_rate?: number
+          extra_balance?: number
+          gender?: string | null
           id?: string
           initial_meter_reading?: number
           is_active?: boolean | null
@@ -204,6 +250,7 @@ export type Database = {
           landlord_id?: string
           monthly_rent?: number
           name?: string
+          occupation?: string | null
           pending_amount?: number
           phone?: string
           room_number?: string

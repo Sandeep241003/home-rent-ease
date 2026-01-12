@@ -50,7 +50,7 @@ export function usePayments(tenantId?: string) {
       // Get current tenant
       const { data: tenant, error: tenantError } = await supabase
         .from('tenants')
-        .select('pending_amount, total_paid')
+        .select('pending_amount, total_paid, extra_balance, name')
         .eq('id', tenantId)
         .single();
       
@@ -67,23 +67,59 @@ export function usePayments(tenantId?: string) {
       
       if (paymentError) throw paymentError;
 
-      // Update tenant balance
-      const newPending = Math.max(0, (tenant.pending_amount || 0) - amount);
+      // Calculate new balances with extra money handling
+      const currentPending = tenant.pending_amount || 0;
+      const currentExtraBalance = tenant.extra_balance || 0;
       const newTotalPaid = (tenant.total_paid || 0) + amount;
 
+      let newPending = currentPending;
+      let newExtraBalance = currentExtraBalance;
+      let extraAdded = 0;
+
+      if (amount >= currentPending) {
+        // Payment covers all pending, rest goes to extra
+        newPending = 0;
+        extraAdded = amount - currentPending;
+        newExtraBalance = currentExtraBalance + extraAdded;
+      } else {
+        // Partial payment
+        newPending = currentPending - amount;
+      }
+
+      // Update tenant balance
       const { error: updateError } = await supabase
         .from('tenants')
         .update({
           pending_amount: newPending,
           total_paid: newTotalPaid,
+          extra_balance: newExtraBalance,
         })
         .eq('id', tenantId);
 
       if (updateError) throw updateError;
+
+      // Log payment received
+      await supabase.from('activity_log').insert({
+        tenant_id: tenantId,
+        event_type: 'PAYMENT_RECEIVED',
+        description: `Payment received: ₹${amount.toLocaleString('en-IN')} via ${paymentMode}`,
+        amount,
+      });
+
+      // Log extra money if any
+      if (extraAdded > 0) {
+        await supabase.from('activity_log').insert({
+          tenant_id: tenantId,
+          event_type: 'EXTRA_ADDED',
+          description: `Extra/Advance balance added: ₹${extraAdded.toLocaleString('en-IN')} (Payment exceeded pending by ₹${extraAdded.toLocaleString('en-IN')})`,
+          amount: extraAdded,
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
       toast({ title: 'Payment recorded successfully' });
     },
     onError: (error: Error) => {
