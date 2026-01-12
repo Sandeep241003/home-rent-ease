@@ -4,6 +4,8 @@ import { Layout } from '@/components/Layout';
 import { useTenants } from '@/hooks/useTenants';
 import { usePayments } from '@/hooks/usePayments';
 import { useElectricity } from '@/hooks/useElectricity';
+import { useActivityLog } from '@/hooks/useActivityLog';
+import { ActivityTimeline } from '@/components/ActivityTimeline';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,9 +34,14 @@ import {
   Zap, 
   IndianRupee,
   Edit,
-  UserX
+  UserX,
+  PiggyBank,
+  History,
+  Briefcase,
+  User
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function TenantDetail() {
   const { id } = useParams<{ id: string }>();
@@ -42,6 +49,7 @@ export default function TenantDetail() {
   const { tenants, updateTenant } = useTenants();
   const { payments, addPayment } = usePayments(id);
   const { readings, addReading } = useElectricity(id);
+  const { logs } = useActivityLog(id);
 
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'UPI' | 'Bank'>('Cash');
@@ -57,7 +65,12 @@ export default function TenantDetail() {
     room_number: '',
     monthly_rent: '',
     electricity_rate: '',
+    gender: '',
+    occupation: '',
   });
+
+  const [aadhaarDialogOpen, setAadhaarDialogOpen] = useState(false);
+  const [aadhaarUrl, setAadhaarUrl] = useState<string | null>(null);
 
   const tenant = tenants.find(t => t.id === id);
 
@@ -110,6 +123,8 @@ export default function TenantDetail() {
         room_number: editForm.room_number,
         monthly_rent: parseFloat(editForm.monthly_rent),
         electricity_rate: parseFloat(editForm.electricity_rate),
+        gender: editForm.gender || undefined,
+        occupation: editForm.occupation || undefined,
       },
     });
     setEditDialogOpen(false);
@@ -130,8 +145,26 @@ export default function TenantDetail() {
       room_number: tenant.room_number,
       monthly_rent: tenant.monthly_rent.toString(),
       electricity_rate: tenant.electricity_rate.toString(),
+      gender: tenant.gender || '',
+      occupation: tenant.occupation || '',
     });
     setEditDialogOpen(true);
+  };
+
+  const viewAadhaar = async () => {
+    if (tenant.aadhaar_image_url) {
+      // For private bucket, we need to create a signed URL
+      const path = tenant.aadhaar_image_url.split('/aadhaar-images/').pop();
+      if (path) {
+        const { data } = await supabase.storage
+          .from('aadhaar-images')
+          .createSignedUrl(path, 300); // 5 minutes
+        if (data?.signedUrl) {
+          setAadhaarUrl(data.signedUrl);
+          setAadhaarDialogOpen(true);
+        }
+      }
+    }
   };
 
   return (
@@ -164,7 +197,7 @@ export default function TenantDetail() {
         </div>
 
         {/* Tenant Info */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Card>
             <CardContent className="flex items-center gap-3 py-4">
               <Phone className="h-5 w-5 text-muted-foreground" />
@@ -201,122 +234,186 @@ export default function TenantDetail() {
               </div>
             </CardContent>
           </Card>
+          <Card>
+            <CardContent className="flex items-center gap-3 py-4">
+              <Briefcase className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <p className="text-sm text-muted-foreground">Occupation</p>
+                <p className="font-medium">{tenant.occupation || 'N/A'}</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Balance Card */}
-        <Card>
-          <CardContent className="py-6">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Pending Amount</p>
-                <p className={`text-3xl font-bold ${tenant.pending_amount > 0 ? 'text-destructive' : 'text-success'}`}>
-                  ₹{tenant.pending_amount.toLocaleString('en-IN')}
-                </p>
+        {/* Balance Cards */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Card>
+            <CardContent className="py-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-full bg-destructive/10">
+                  <IndianRupee className="h-6 w-6 text-destructive" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Pending Amount</p>
+                  <p className={`text-3xl font-bold ${tenant.pending_amount > 0 ? 'text-destructive' : 'text-success'}`}>
+                    ₹{tenant.pending_amount.toLocaleString('en-IN')}
+                  </p>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button>
-                      <IndianRupee className="h-4 w-4 mr-2" />
-                      Record Payment
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Record Payment</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 pt-4">
-                      <div className="space-y-2">
-                        <Label>Amount (₹)</Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={paymentAmount}
-                          onChange={(e) => setPaymentAmount(e.target.value)}
-                          placeholder="Enter amount"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Payment Mode</Label>
-                        <Select value={paymentMode} onValueChange={(v) => setPaymentMode(v as any)}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Cash">Cash</SelectItem>
-                            <SelectItem value="UPI">UPI</SelectItem>
-                            <SelectItem value="Bank">Bank Transfer</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button 
-                        onClick={handlePayment} 
-                        disabled={addPayment.isPending || !paymentAmount}
-                        className="w-full"
-                      >
-                        {addPayment.isPending ? 'Recording...' : 'Record Payment'}
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="py-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-full bg-primary/10">
+                  <PiggyBank className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Extra / Advance Balance</p>
+                  <p className="text-3xl font-bold text-primary">
+                    ₹{(tenant.extra_balance || 0).toLocaleString('en-IN')}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-                <Dialog open={electricityDialogOpen} onOpenChange={setElectricityDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline">
-                      <Zap className="h-4 w-4 mr-2" />
-                      Add Electricity
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Record Electricity Reading</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 pt-4">
-                      <div className="p-3 bg-muted rounded-lg">
-                        <p className="text-sm text-muted-foreground">Previous Reading</p>
-                        <p className="text-lg font-semibold">{tenant.current_meter_reading} units</p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Current Reading</Label>
-                        <Input
-                          type="number"
-                          min={tenant.current_meter_reading}
-                          step="0.01"
-                          value={meterReading}
-                          onChange={(e) => setMeterReading(e.target.value)}
-                          placeholder="Enter current reading"
-                        />
-                      </div>
-                      {meterReading && parseFloat(meterReading) >= tenant.current_meter_reading && (
-                        <div className="p-3 bg-accent/10 rounded-lg">
-                          <p className="text-sm text-muted-foreground">Estimated Bill</p>
-                          <p className="text-lg font-semibold text-accent">
-                            {(parseFloat(meterReading) - tenant.current_meter_reading).toFixed(2)} units × ₹{tenant.electricity_rate} = 
-                            ₹{((parseFloat(meterReading) - tenant.current_meter_reading) * tenant.electricity_rate).toFixed(2)}
-                          </p>
-                        </div>
-                      )}
-                      <Button 
-                        onClick={handleElectricity} 
-                        disabled={addReading.isPending || !meterReading || parseFloat(meterReading) < tenant.current_meter_reading}
-                        className="w-full"
-                      >
-                        {addReading.isPending ? 'Recording...' : 'Add to Bill'}
-                      </Button>
-                    </div>
-                  </DialogContent>
-                </Dialog>
+        {/* Actions */}
+        <div className="flex flex-wrap gap-2">
+          <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <IndianRupee className="h-4 w-4 mr-2" />
+                Record Payment
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Record Payment</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-4">
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">Current Pending</p>
+                  <p className="text-lg font-semibold">₹{tenant.pending_amount.toLocaleString('en-IN')}</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Amount (₹)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    placeholder="Enter amount"
+                  />
+                </div>
+                {paymentAmount && parseFloat(paymentAmount) > tenant.pending_amount && (
+                  <div className="p-3 bg-primary/10 rounded-lg">
+                    <p className="text-sm text-muted-foreground">Extra balance to be added</p>
+                    <p className="text-lg font-semibold text-primary">
+                      +₹{(parseFloat(paymentAmount) - tenant.pending_amount).toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label>Payment Mode</Label>
+                  <Select value={paymentMode} onValueChange={(v) => setPaymentMode(v as any)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Cash">Cash</SelectItem>
+                      <SelectItem value="UPI">UPI</SelectItem>
+                      <SelectItem value="Bank">Bank Transfer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button 
+                  onClick={handlePayment} 
+                  disabled={addPayment.isPending || !paymentAmount}
+                  className="w-full"
+                >
+                  {addPayment.isPending ? 'Recording...' : 'Record Payment'}
+                </Button>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={electricityDialogOpen} onOpenChange={setElectricityDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Zap className="h-4 w-4 mr-2" />
+                Add Electricity
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Record Electricity Reading</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-4">
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">Previous Reading</p>
+                  <p className="text-lg font-semibold">{tenant.current_meter_reading} units</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Current Reading</Label>
+                  <Input
+                    type="number"
+                    min={tenant.current_meter_reading}
+                    step="0.01"
+                    value={meterReading}
+                    onChange={(e) => setMeterReading(e.target.value)}
+                    placeholder="Enter current reading"
+                  />
+                </div>
+                {meterReading && parseFloat(meterReading) >= tenant.current_meter_reading && (
+                  <div className="p-3 bg-accent/10 rounded-lg">
+                    <p className="text-sm text-muted-foreground">Estimated Bill</p>
+                    <p className="text-lg font-semibold text-accent">
+                      {(parseFloat(meterReading) - tenant.current_meter_reading).toFixed(2)} units × ₹{tenant.electricity_rate} = 
+                      ₹{((parseFloat(meterReading) - tenant.current_meter_reading) * tenant.electricity_rate).toFixed(2)}
+                    </p>
+                  </div>
+                )}
+                <Button 
+                  onClick={handleElectricity} 
+                  disabled={addReading.isPending || !meterReading || parseFloat(meterReading) < tenant.current_meter_reading}
+                  className="w-full"
+                >
+                  {addReading.isPending ? 'Recording...' : 'Add to Bill'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {tenant.aadhaar_image_url && (
+            <Button variant="outline" onClick={viewAadhaar}>
+              <User className="h-4 w-4 mr-2" />
+              View Aadhaar
+            </Button>
+          )}
+        </div>
 
         {/* History Tabs */}
-        <Tabs defaultValue="payments">
+        <Tabs defaultValue="history">
           <TabsList>
+            <TabsTrigger value="history">
+              <History className="h-4 w-4 mr-2" />
+              Activity Log
+            </TabsTrigger>
             <TabsTrigger value="payments">Payments</TabsTrigger>
             <TabsTrigger value="electricity">Electricity</TabsTrigger>
           </TabsList>
+          <TabsContent value="history" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Complete History</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ActivityTimeline logs={logs} />
+              </CardContent>
+            </Card>
+          </TabsContent>
           <TabsContent value="payments" className="mt-4">
             {payments.length === 0 ? (
               <Card>
@@ -386,7 +483,7 @@ export default function TenantDetail() {
             <DialogHeader>
               <DialogTitle>Edit Tenant</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 pt-4">
+            <div className="space-y-4 pt-4 max-h-[70vh] overflow-y-auto">
               <div className="space-y-2">
                 <Label>Name</Label>
                 <Input
@@ -406,6 +503,29 @@ export default function TenantDetail() {
                 <Input
                   value={editForm.room_number}
                   onChange={(e) => setEditForm({ ...editForm, room_number: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Gender</Label>
+                <Select 
+                  value={editForm.gender} 
+                  onValueChange={(v) => setEditForm({ ...editForm, gender: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Occupation</Label>
+                <Input
+                  value={editForm.occupation}
+                  onChange={(e) => setEditForm({ ...editForm, occupation: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
@@ -433,6 +553,24 @@ export default function TenantDetail() {
                 {updateTenant.isPending ? 'Saving...' : 'Save Changes'}
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Aadhaar Dialog */}
+        <Dialog open={aadhaarDialogOpen} onOpenChange={setAadhaarDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Aadhaar Card - {tenant.name}</DialogTitle>
+            </DialogHeader>
+            {aadhaarUrl && (
+              <div className="mt-4">
+                <img 
+                  src={aadhaarUrl} 
+                  alt="Aadhaar Card" 
+                  className="w-full rounded-lg"
+                />
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>
