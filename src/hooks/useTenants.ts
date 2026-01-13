@@ -3,6 +3,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
+export interface Member {
+  name: string;
+  phone: string;
+  gender: string;
+  occupation: string;
+  aadhaar_front_url?: string;
+  aadhaar_back_url?: string;
+}
+
 export interface Tenant {
   id: string;
   landlord_id: string;
@@ -21,6 +30,10 @@ export interface Tenant {
   gender: string | null;
   occupation: string | null;
   aadhaar_image_url: string | null;
+  aadhaar_back_image_url: string | null;
+  members: Member[];
+  discontinued_reason: string | null;
+  discontinued_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -36,6 +49,8 @@ export interface TenantFormData {
   gender?: string;
   occupation?: string;
   aadhaar_image_url?: string;
+  aadhaar_back_image_url?: string;
+  members?: Member[];
 }
 
 export function useTenants() {
@@ -52,7 +67,13 @@ export function useTenants() {
         .order('room_number', { ascending: true });
       
       if (error) throw error;
-      return data as Tenant[];
+      
+      // Parse members JSON for each tenant
+      return (data || []).map(tenant => ({
+        ...tenant,
+        members: Array.isArray(tenant.members) ? tenant.members : 
+                 (typeof tenant.members === 'string' ? JSON.parse(tenant.members) : [])
+      })) as Tenant[];
     },
     enabled: !!user,
   });
@@ -77,7 +98,18 @@ export function useTenants() {
         .from('tenants')
         .insert({
           landlord_id: user!.id,
-          ...data,
+          name: data.name,
+          phone: data.phone,
+          room_number: data.room_number,
+          monthly_rent: data.monthly_rent,
+          electricity_rate: data.electricity_rate,
+          initial_meter_reading: data.initial_meter_reading,
+          joining_date: data.joining_date,
+          gender: data.gender,
+          occupation: data.occupation,
+          aadhaar_image_url: data.aadhaar_image_url,
+          aadhaar_back_image_url: data.aadhaar_back_image_url,
+          members: JSON.parse(JSON.stringify(data.members || [])),
           current_meter_reading: data.initial_meter_reading,
           pending_amount: initialPending,
         })
@@ -86,11 +118,14 @@ export function useTenants() {
       
       if (error) throw error;
 
-      // Log tenant created
+      // Log room created
+      const memberCount = data.members?.length || 0;
+      const memberNames = data.members?.map(m => m.name).join(', ') || data.name;
+      
       await supabase.from('activity_log').insert({
         tenant_id: newTenant.id,
         event_type: 'TENANT_CREATED',
-        description: `Tenant "${data.name}" added to Room ${data.room_number}`,
+        description: `Room ${data.room_number} created with ${memberCount > 0 ? memberCount : 1} member(s): ${memberNames}`,
         amount: null,
       });
 
@@ -117,19 +152,30 @@ export function useTenants() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
-      toast({ title: 'Tenant added successfully' });
+      toast({ title: 'Room added successfully' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Error adding tenant', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error adding room', description: error.message, variant: 'destructive' });
     },
   });
 
   const updateTenant = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<TenantFormData & { is_active: boolean }> }) => {
+    mutationFn: async ({ id, data }: { id: string; data: Partial<{
+      name: string;
+      phone: string;
+      room_number: string;
+      monthly_rent: number;
+      electricity_rate: number;
+      gender: string;
+      occupation: string;
+      is_active: boolean;
+      discontinued_reason: string;
+      discontinued_at: string;
+    }> }) => {
       // Get current tenant for logging
       const { data: currentTenant } = await supabase
         .from('tenants')
-        .select('is_active, name')
+        .select('is_active, name, room_number')
         .eq('id', id)
         .single();
 
@@ -144,8 +190,8 @@ export function useTenants() {
       if (currentTenant && data.is_active !== undefined && data.is_active !== currentTenant.is_active) {
         const eventType = data.is_active ? 'TENANT_REACTIVATED' : 'TENANT_DEACTIVATED';
         const description = data.is_active 
-          ? `Tenant "${currentTenant.name}" reactivated`
-          : `Tenant "${currentTenant.name}" deactivated`;
+          ? `Room ${currentTenant.room_number} reactivated`
+          : `Room ${currentTenant.room_number} vacated/discontinued${data.discontinued_reason ? ': ' + data.discontinued_reason : ''}`;
         
         await supabase.from('activity_log').insert({
           tenant_id: id,
@@ -158,10 +204,10 @@ export function useTenants() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
       queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
-      toast({ title: 'Tenant updated successfully' });
+      toast({ title: 'Room updated successfully' });
     },
     onError: (error: Error) => {
-      toast({ title: 'Error updating tenant', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error updating room', description: error.message, variant: 'destructive' });
     },
   });
 

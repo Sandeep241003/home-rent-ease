@@ -142,6 +142,8 @@ export type Database = {
           notes: string | null
           payment_date: string | null
           payment_mode: string
+          payment_reason: string
+          reason_notes: string | null
           tenant_id: string
         }
         Insert: {
@@ -151,6 +153,8 @@ export type Database = {
           notes?: string | null
           payment_date?: string | null
           payment_mode: string
+          payment_reason?: string
+          reason_notes?: string | null
           tenant_id: string
         }
         Update: {
@@ -160,6 +164,8 @@ export type Database = {
           notes?: string | null
           payment_date?: string | null
           payment_mode?: string
+          payment_reason?: string
+          reason_notes?: string | null
           tenant_id?: string
         }
         Relationships: [
@@ -195,9 +201,12 @@ export type Database = {
       }
       tenants: {
         Row: {
+          aadhaar_back_image_url: string | null
           aadhaar_image_url: string | null
           created_at: string | null
           current_meter_reading: number
+          discontinued_at: string | null
+          discontinued_reason: string | null
           electricity_rate: number
           extra_balance: number
           gender: string | null
@@ -206,6 +215,7 @@ export type Database = {
           is_active: boolean | null
           joining_date: string
           landlord_id: string
+          members: Json | null
           monthly_rent: number
           name: string
           occupation: string | null
@@ -216,9 +226,12 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          aadhaar_back_image_url?: string | null
           aadhaar_image_url?: string | null
           created_at?: string | null
           current_meter_reading?: number
+          discontinued_at?: string | null
+          discontinued_reason?: string | null
           electricity_rate?: number
           extra_balance?: number
           gender?: string | null
@@ -227,6 +240,7 @@ export type Database = {
           is_active?: boolean | null
           joining_date?: string
           landlord_id: string
+          members?: Json | null
           monthly_rent?: number
           name: string
           occupation?: string | null
@@ -237,9 +251,12 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          aadhaar_back_image_url?: string | null
           aadhaar_image_url?: string | null
           created_at?: string | null
           current_meter_reading?: number
+          discontinued_at?: string | null
+          discontinued_reason?: string | null
           electricity_rate?: number
           extra_balance?: number
           gender?: string | null
@@ -248,6 +265,7 @@ export type Database = {
           is_active?: boolean | null
           joining_date?: string
           landlord_id?: string
+          members?: Json | null
           monthly_rent?: number
           name?: string
           occupation?: string | null

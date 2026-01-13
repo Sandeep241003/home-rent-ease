@@ -12,7 +12,6 @@ import {
   List,
   FileText,
   TrendingUp,
-  PiggyBank
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -21,7 +20,6 @@ export default function Dashboard() {
 
   const activeTenants = tenants.filter(t => t.is_active);
   const totalPending = activeTenants.reduce((sum, t) => sum + (t.pending_amount || 0), 0);
-  const totalExtraBalance = activeTenants.reduce((sum, t) => sum + (t.extra_balance || 0), 0);
   const defaulters = activeTenants.filter(t => (t.pending_amount || 0) > 0);
   
   // Total collected
@@ -52,8 +50,8 @@ export default function Dashboard() {
           </p>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Stats Grid - Removed Extra Balance */}
+        <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -91,23 +89,6 @@ export default function Dashboard() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Extra Balance
-              </CardTitle>
-              <PiggyBank className="h-4 w-4 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-primary">
-                ₹{totalExtraBalance.toLocaleString('en-IN')}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Advance payments
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
                 Defaulters
               </CardTitle>
               <AlertCircle className="h-4 w-4 text-destructive" />
@@ -117,7 +98,7 @@ export default function Dashboard() {
                 {defaulters.length}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Tenants with pending dues
+                Rooms with pending dues
               </p>
             </CardContent>
           </Card>
@@ -128,7 +109,7 @@ export default function Dashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              Active Tenants
+              Active Rooms
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -143,13 +124,13 @@ export default function Dashboard() {
             <Button asChild className="h-auto py-4" variant="outline">
               <Link to="/tenants/add" className="flex flex-col items-center gap-2">
                 <UserPlus className="h-6 w-6" />
-                <span>Add Tenant</span>
+                <span>Add Room</span>
               </Link>
             </Button>
             <Button asChild className="h-auto py-4" variant="outline">
               <Link to="/tenants" className="flex flex-col items-center gap-2">
                 <List className="h-6 w-6" />
-                <span>Tenant List</span>
+                <span>Room List</span>
               </Link>
             </Button>
             <Button asChild className="h-auto py-4" variant="outline">

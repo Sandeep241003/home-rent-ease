@@ -9,6 +9,8 @@ export interface Payment {
   amount: number;
   payment_mode: 'Cash' | 'UPI' | 'Bank';
   payment_date: string;
+  payment_reason: string;
+  reason_notes: string | null;
   notes: string | null;
   created_at: string;
 }
@@ -41,16 +43,22 @@ export function usePayments(tenantId?: string) {
     mutationFn: async ({ 
       tenantId, 
       amount, 
-      paymentMode 
+      paymentMode,
+      paymentReason,
+      reasonNotes,
+      paymentDate,
     }: { 
       tenantId: string; 
       amount: number; 
       paymentMode: 'Cash' | 'UPI' | 'Bank';
+      paymentReason: string;
+      reasonNotes?: string;
+      paymentDate: string;
     }) => {
       // Get current tenant
       const { data: tenant, error: tenantError } = await supabase
         .from('tenants')
-        .select('pending_amount, total_paid, extra_balance, name')
+        .select('pending_amount, total_paid, extra_balance, name, room_number')
         .eq('id', tenantId)
         .single();
       
@@ -63,6 +71,9 @@ export function usePayments(tenantId?: string) {
           tenant_id: tenantId,
           amount,
           payment_mode: paymentMode,
+          payment_reason: paymentReason,
+          reason_notes: reasonNotes || null,
+          payment_date: paymentDate,
         });
       
       if (paymentError) throw paymentError;
@@ -98,11 +109,22 @@ export function usePayments(tenantId?: string) {
 
       if (updateError) throw updateError;
 
-      // Log payment received
+      // Format payment date for description
+      const formattedDate = new Date(paymentDate).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      });
+
+      // Log payment received with reason and date
+      const reasonText = paymentReason === 'Other' && reasonNotes 
+        ? reasonNotes 
+        : paymentReason;
+      
       await supabase.from('activity_log').insert({
         tenant_id: tenantId,
         event_type: 'PAYMENT_RECEIVED',
-        description: `Payment received: ₹${amount.toLocaleString('en-IN')} via ${paymentMode}`,
+        description: `Payment received: ₹${amount.toLocaleString('en-IN')} via ${paymentMode} for ${reasonText} (Date: ${formattedDate})`,
         amount,
       });
 
