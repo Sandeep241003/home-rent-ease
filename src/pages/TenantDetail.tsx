@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { useTenants, Member } from '@/hooks/useTenants';
@@ -45,39 +45,72 @@ import {
   Users,
   Download,
   UserCheck,
+  UserPlus,
+  Upload,
+  Check,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
+import JSZip from 'jszip';
 
 export default function TenantDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { tenants, updateTenant } = useTenants();
+  const { tenants, updateTenant, updateMembers } = useTenants();
   const { payments, addPayment } = usePayments(id);
   const { readings, addReading } = useElectricity(id);
   const { logs } = useActivityLog(id);
+  const { user } = useAuth();
+  const { toast } = useToast();
 
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'UPI' | 'Bank'>('Cash');
   const [paymentReason, setPaymentReason] = useState<string>('Rent');
   const [paymentReasonNotes, setPaymentReasonNotes] = useState('');
   const [paymentDate, setPaymentDate] = useState<Date>(new Date());
+  const [paymentPaidBy, setPaymentPaidBy] = useState<string>('');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
 
   const [meterReading, setMeterReading] = useState('');
   const [electricityDialogOpen, setElectricityDialogOpen] = useState(false);
 
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [editForm, setEditForm] = useState({
-    name: '',
-    phone: '',
+  const [editRoomForm, setEditRoomForm] = useState({
     room_number: '',
     monthly_rent: '',
     electricity_rate: '',
+  });
+
+  const [editMemberDialogOpen, setEditMemberDialogOpen] = useState(false);
+  const [editMemberIndex, setEditMemberIndex] = useState<number>(-1);
+  const [editMemberForm, setEditMemberForm] = useState({
+    name: '',
+    phone: '',
     gender: '',
     occupation: '',
+    aadhaar_front_file: null as File | null,
+    aadhaar_back_file: null as File | null,
   });
+  const editFrontRef = useRef<HTMLInputElement>(null);
+  const editBackRef = useRef<HTMLInputElement>(null);
+
+  const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
+  const [newMemberForm, setNewMemberForm] = useState({
+    name: '',
+    phone: '',
+    gender: '',
+    occupation: '',
+    aadhaar_front_file: null as File | null,
+    aadhaar_back_file: null as File | null,
+  });
+  const addFrontRef = useRef<HTMLInputElement>(null);
+  const addBackRef = useRef<HTMLInputElement>(null);
+
+  const [discontinueMemberDialogOpen, setDiscontinueMemberDialogOpen] = useState(false);
+  const [discontinueMemberIndex, setDiscontinueMemberIndex] = useState<number>(-1);
 
   const [discontinueDialogOpen, setDiscontinueDialogOpen] = useState(false);
   const [discontinueReason, setDiscontinueReason] = useState('');
@@ -100,8 +133,9 @@ export default function TenantDetail() {
     );
   }
 
-  const members: Member[] = Array.isArray(tenant.members) && tenant.members.length > 0 
-    ? tenant.members 
+  // Parse members - filter active ones
+  const allMembers: (Member & { is_active?: boolean })[] = Array.isArray(tenant.members) && tenant.members.length > 0 
+    ? tenant.members.map(m => ({ ...m, is_active: m.is_active !== false }))
     : [{
         name: tenant.name,
         phone: tenant.phone,
@@ -109,12 +143,39 @@ export default function TenantDetail() {
         occupation: tenant.occupation || '',
         aadhaar_front_url: tenant.aadhaar_image_url?.split('/aadhaar-images/').pop(),
         aadhaar_back_url: tenant.aadhaar_back_image_url?.split('/aadhaar-images/').pop(),
+        is_active: true,
       }];
+
+  const activeMembers = allMembers.filter(m => m.is_active !== false);
+
+  const uploadAadhaarImage = async (file: File): Promise<string | undefined> => {
+    if (!user) return undefined;
+    
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from('aadhaar-images')
+      .upload(fileName, file);
+
+    if (!uploadError) {
+      return fileName;
+    }
+    return undefined;
+  };
 
   const handlePayment = async () => {
     const amount = parseFloat(paymentAmount);
     if (amount <= 0) return;
     if (paymentReason === 'Other' && !paymentReasonNotes.trim()) return;
+
+    // Determine paid_by
+    let paidBy: string | undefined;
+    if (activeMembers.length === 1) {
+      paidBy = activeMembers[0].name;
+    } else if (activeMembers.length === 2 && paymentPaidBy) {
+      paidBy = paymentPaidBy;
+    }
 
     await addPayment.mutateAsync({
       tenantId: tenant.id,
@@ -123,12 +184,14 @@ export default function TenantDetail() {
       paymentReason,
       reasonNotes: paymentReason === 'Other' ? paymentReasonNotes : undefined,
       paymentDate: paymentDate.toISOString(),
+      paidBy,
     });
 
     setPaymentAmount('');
     setPaymentReason('Rent');
     setPaymentReasonNotes('');
     setPaymentDate(new Date());
+    setPaymentPaidBy('');
     setPaymentDialogOpen(false);
   };
 
@@ -145,20 +208,148 @@ export default function TenantDetail() {
     setElectricityDialogOpen(false);
   };
 
-  const handleEdit = async () => {
+  const handleEditRoom = async () => {
     await updateTenant.mutateAsync({
       id: tenant.id,
       data: {
-        name: editForm.name,
-        phone: editForm.phone,
-        room_number: editForm.room_number,
-        monthly_rent: parseFloat(editForm.monthly_rent),
-        electricity_rate: parseFloat(editForm.electricity_rate),
-        gender: editForm.gender || undefined,
-        occupation: editForm.occupation || undefined,
+        room_number: editRoomForm.room_number,
+        monthly_rent: parseFloat(editRoomForm.monthly_rent),
+        electricity_rate: parseFloat(editRoomForm.electricity_rate),
       },
     });
     setEditDialogOpen(false);
+  };
+
+  const openEditRoomDialog = () => {
+    setEditRoomForm({
+      room_number: tenant.room_number,
+      monthly_rent: tenant.monthly_rent.toString(),
+      electricity_rate: tenant.electricity_rate.toString(),
+    });
+    setEditDialogOpen(true);
+  };
+
+  const openEditMemberDialog = (index: number) => {
+    const member = allMembers[index];
+    setEditMemberIndex(index);
+    setEditMemberForm({
+      name: member.name,
+      phone: member.phone,
+      gender: member.gender || '',
+      occupation: member.occupation || '',
+      aadhaar_front_file: null,
+      aadhaar_back_file: null,
+    });
+    setEditMemberDialogOpen(true);
+  };
+
+  const handleEditMember = async () => {
+    if (!updateMembers) return;
+    
+    const updatedMembers = [...allMembers];
+    let frontUrl = allMembers[editMemberIndex].aadhaar_front_url;
+    let backUrl = allMembers[editMemberIndex].aadhaar_back_url;
+
+    if (editMemberForm.aadhaar_front_file) {
+      frontUrl = await uploadAadhaarImage(editMemberForm.aadhaar_front_file);
+    }
+    if (editMemberForm.aadhaar_back_file) {
+      backUrl = await uploadAadhaarImage(editMemberForm.aadhaar_back_file);
+    }
+
+    updatedMembers[editMemberIndex] = {
+      ...updatedMembers[editMemberIndex],
+      name: editMemberForm.name,
+      phone: editMemberForm.phone,
+      gender: editMemberForm.gender,
+      occupation: editMemberForm.occupation,
+      aadhaar_front_url: frontUrl,
+      aadhaar_back_url: backUrl,
+    };
+
+    await updateMembers.mutateAsync({
+      tenantId: tenant.id,
+      members: updatedMembers,
+      action: 'edit',
+      memberName: editMemberForm.name,
+    });
+
+    setEditMemberDialogOpen(false);
+    setEditMemberForm({
+      name: '',
+      phone: '',
+      gender: '',
+      occupation: '',
+      aadhaar_front_file: null,
+      aadhaar_back_file: null,
+    });
+  };
+
+  const handleAddMember = async () => {
+    if (!updateMembers) return;
+    if (activeMembers.length >= 2) {
+      toast({ title: 'Maximum 2 members allowed per room', variant: 'destructive' });
+      return;
+    }
+
+    let frontUrl: string | undefined;
+    let backUrl: string | undefined;
+
+    if (newMemberForm.aadhaar_front_file) {
+      frontUrl = await uploadAadhaarImage(newMemberForm.aadhaar_front_file);
+    }
+    if (newMemberForm.aadhaar_back_file) {
+      backUrl = await uploadAadhaarImage(newMemberForm.aadhaar_back_file);
+    }
+
+    const newMember: Member = {
+      name: newMemberForm.name,
+      phone: newMemberForm.phone,
+      gender: newMemberForm.gender,
+      occupation: newMemberForm.occupation,
+      aadhaar_front_url: frontUrl,
+      aadhaar_back_url: backUrl,
+    };
+
+    const updatedMembers = [...allMembers, { ...newMember, is_active: true }];
+
+    await updateMembers.mutateAsync({
+      tenantId: tenant.id,
+      members: updatedMembers,
+      action: 'add',
+      memberName: newMemberForm.name,
+    });
+
+    setAddMemberDialogOpen(false);
+    setNewMemberForm({
+      name: '',
+      phone: '',
+      gender: '',
+      occupation: '',
+      aadhaar_front_file: null,
+      aadhaar_back_file: null,
+    });
+  };
+
+  const handleDiscontinueMember = async () => {
+    if (!updateMembers) return;
+    
+    const updatedMembers = [...allMembers];
+    const memberName = updatedMembers[discontinueMemberIndex].name;
+    updatedMembers[discontinueMemberIndex] = {
+      ...updatedMembers[discontinueMemberIndex],
+      is_active: false,
+    };
+
+    await updateMembers.mutateAsync({
+      tenantId: tenant.id,
+      members: updatedMembers,
+      action: 'discontinue',
+      memberName,
+    });
+
+    setDiscontinueMemberDialogOpen(false);
+    setDiscontinueMemberIndex(-1);
   };
 
   const handleDiscontinue = async () => {
@@ -184,19 +375,6 @@ export default function TenantDetail() {
         discontinued_at: undefined,
       },
     });
-  };
-
-  const openEditDialog = () => {
-    setEditForm({
-      name: tenant.name,
-      phone: tenant.phone,
-      room_number: tenant.room_number,
-      monthly_rent: tenant.monthly_rent.toString(),
-      electricity_rate: tenant.electricity_rate.toString(),
-      gender: tenant.gender || '',
-      occupation: tenant.occupation || '',
-    });
-    setEditDialogOpen(true);
   };
 
   const viewAadhaar = async (member: Member, memberName: string) => {
@@ -226,18 +404,149 @@ export default function TenantDetail() {
     }
   };
 
-  const downloadAadhaar = async (url: string, memberName: string, side: 'front' | 'back') => {
-    const response = await fetch(url);
-    const blob = await response.blob();
-    const downloadUrl = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `Aadhaar_${memberName.replace(/\s+/g, '_')}_Room${tenant.room_number}_${side}.jpg`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(downloadUrl);
+  // Combined Aadhaar download as ZIP
+  const downloadAadhaarCombined = async () => {
+    const memberName = aadhaarUrls.memberName?.replace(/\s+/g, '_') || 'Member';
+    const zip = new JSZip();
+
+    try {
+      if (aadhaarUrls.front) {
+        const frontResponse = await fetch(aadhaarUrls.front);
+        const frontBlob = await frontResponse.blob();
+        zip.file(`${memberName}_Room${tenant.room_number}_Aadhaar_Front.jpg`, frontBlob);
+      }
+
+      if (aadhaarUrls.back) {
+        const backResponse = await fetch(aadhaarUrls.back);
+        const backBlob = await backResponse.blob();
+        zip.file(`${memberName}_Room${tenant.room_number}_Aadhaar_Back.jpg`, backBlob);
+      }
+
+      const content = await zip.generateAsync({ type: 'blob' });
+      const downloadUrl = window.URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `${memberName}_Room${tenant.room_number}_Aadhaar.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      toast({ title: 'Aadhaar downloaded successfully' });
+    } catch (error) {
+      console.error('Error downloading Aadhaar:', error);
+      toast({ title: 'Error downloading Aadhaar', variant: 'destructive' });
+    }
   };
+
+  const renderMemberEditForm = (
+    form: typeof editMemberForm | typeof newMemberForm,
+    setForm: React.Dispatch<React.SetStateAction<typeof editMemberForm | typeof newMemberForm>>,
+    frontRef: React.RefObject<HTMLInputElement>,
+    backRef: React.RefObject<HTMLInputElement>
+  ) => (
+    <div className="space-y-4 pt-4 max-h-[70vh] overflow-y-auto">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label>Full Name *</Label>
+          <Input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder="John Doe"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Gender</Label>
+          <Select 
+            value={form.gender} 
+            onValueChange={(v) => setForm({ ...form, gender: v })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select gender" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="male">Male</SelectItem>
+              <SelectItem value="female">Female</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label>Phone Number *</Label>
+          <Input
+            value={form.phone}
+            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            placeholder="9876543210"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Occupation</Label>
+          <Input
+            value={form.occupation}
+            onChange={(e) => setForm({ ...form, occupation: e.target.value })}
+            placeholder="Software Engineer"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Aadhaar Card (Front Side)</Label>
+        <div 
+          className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+          onClick={() => frontRef.current?.click()}
+        >
+          <input
+            ref={frontRef}
+            type="file"
+            accept="image/*"
+            onChange={(e) => setForm({ ...form, aadhaar_front_file: e.target.files?.[0] || null })}
+            className="hidden"
+          />
+          {form.aadhaar_front_file ? (
+            <div className="flex items-center justify-center gap-2 text-primary">
+              <Check className="h-5 w-5" />
+              <span className="text-sm">{form.aadhaar_front_file.name}</span>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <Upload className="h-6 w-6 mx-auto text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Click to upload or replace</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Aadhaar Card (Back Side)</Label>
+        <div 
+          className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+          onClick={() => backRef.current?.click()}
+        >
+          <input
+            ref={backRef}
+            type="file"
+            accept="image/*"
+            onChange={(e) => setForm({ ...form, aadhaar_back_file: e.target.files?.[0] || null })}
+            className="hidden"
+          />
+          {form.aadhaar_back_file ? (
+            <div className="flex items-center justify-center gap-2 text-primary">
+              <Check className="h-5 w-5" />
+              <span className="text-sm">{form.aadhaar_back_file.name}</span>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <Upload className="h-6 w-6 mx-auto text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Click to upload or replace</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <Layout>
@@ -254,7 +563,7 @@ export default function TenantDetail() {
             <p className="text-muted-foreground">{tenant.name}</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="icon" onClick={openEditDialog}>
+            <Button variant="outline" size="icon" onClick={openEditRoomDialog}>
               <Edit className="h-4 w-4" />
             </Button>
             {tenant.is_active ? (
@@ -282,27 +591,73 @@ export default function TenantDetail() {
         {/* Members Section */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Users className="h-5 w-5" />
-              Members ({members.length})
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Users className="h-5 w-5" />
+                Members ({activeMembers.length})
+              </CardTitle>
+              {tenant.is_active && activeMembers.length < 2 && (
+                <Button variant="outline" size="sm" onClick={() => setAddMemberDialogOpen(true)}>
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Add Member
+                </Button>
+              )}
+              {tenant.is_active && activeMembers.length >= 2 && (
+                <Badge variant="secondary">Maximum 2 members</Badge>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-2">
-              {members.map((member, index) => (
-                <div key={index} className="p-4 border rounded-lg space-y-2">
+              {allMembers.map((member, index) => (
+                <div 
+                  key={index} 
+                  className={cn(
+                    "p-4 border rounded-lg space-y-2",
+                    member.is_active === false && "opacity-60 bg-muted/30"
+                  )}
+                >
                   <div className="flex items-center justify-between">
-                    <p className="font-semibold">{member.name}</p>
-                    {(member.aadhaar_front_url || member.aadhaar_back_url) && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => viewAadhaar(member, member.name)}
-                      >
-                        <User className="h-4 w-4 mr-1" />
-                        Aadhaar
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold">{member.name}</p>
+                      {member.is_active === false && <Badge variant="secondary">Inactive</Badge>}
+                    </div>
+                    <div className="flex gap-1">
+                      {member.is_active !== false && (
+                        <>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => openEditMemberDialog(index)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          {activeMembers.length > 1 && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="text-destructive"
+                              onClick={() => {
+                                setDiscontinueMemberIndex(index);
+                                setDiscontinueMemberDialogOpen(true);
+                              }}
+                            >
+                              <UserX className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </>
+                      )}
+                      {(member.aadhaar_front_url || member.aadhaar_back_url) && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => viewAadhaar(member, member.name)}
+                        >
+                          <User className="h-4 w-4 mr-1" />
+                          Aadhaar
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <div className="text-sm text-muted-foreground space-y-1">
                     <p className="flex items-center gap-2">
@@ -439,6 +794,25 @@ export default function TenantDetail() {
                     </div>
                   )}
 
+                  {/* Payment Member Selection - Only if 2 active members */}
+                  {activeMembers.length === 2 && (
+                    <div className="space-y-2">
+                      <Label>Payment received from *</Label>
+                      <Select value={paymentPaidBy} onValueChange={setPaymentPaidBy}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select member" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {activeMembers.map((member, idx) => (
+                            <SelectItem key={idx} value={member.name}>
+                              {member.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <Label>Payment Mode *</Label>
                     <Select value={paymentMode} onValueChange={(v) => setPaymentMode(v as any)}>
@@ -511,7 +885,8 @@ export default function TenantDetail() {
                     disabled={
                       addPayment.isPending || 
                       !paymentAmount || 
-                      (paymentReason === 'Other' && !paymentReasonNotes.trim())
+                      (paymentReason === 'Other' && !paymentReasonNotes.trim()) ||
+                      (activeMembers.length === 2 && !paymentPaidBy)
                     }
                     className="w-full"
                   >
@@ -609,6 +984,7 @@ export default function TenantDetail() {
                         <p className="text-sm text-muted-foreground">
                           {format(new Date(payment.payment_date), 'dd MMM yyyy')} • {payment.payment_reason}
                           {payment.reason_notes && ` (${payment.reason_notes})`}
+                          {(payment as any).paid_by && ` • Paid by: ${(payment as any).paid_by}`}
                         </p>
                       </div>
                       <Badge variant="outline">{payment.payment_mode}</Badge>
@@ -654,40 +1030,26 @@ export default function TenantDetail() {
           </TabsContent>
         </Tabs>
 
-        {/* Edit Dialog */}
+        {/* Edit Room Dialog */}
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Edit Room</DialogTitle>
+              <DialogTitle>Edit Room Details</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-4 max-h-[70vh] overflow-y-auto">
               <div className="space-y-2">
-                <Label>Name</Label>
-                <Input
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Phone</Label>
-                <Input
-                  value={editForm.phone}
-                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
                 <Label>Room Number</Label>
                 <Input
-                  value={editForm.room_number}
-                  onChange={(e) => setEditForm({ ...editForm, room_number: e.target.value })}
+                  value={editRoomForm.room_number}
+                  onChange={(e) => setEditRoomForm({ ...editRoomForm, room_number: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Monthly Rent (₹)</Label>
                 <Input
                   type="number"
-                  value={editForm.monthly_rent}
-                  onChange={(e) => setEditForm({ ...editForm, monthly_rent: e.target.value })}
+                  value={editRoomForm.monthly_rent}
+                  onChange={(e) => setEditRoomForm({ ...editRoomForm, monthly_rent: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
@@ -695,12 +1057,12 @@ export default function TenantDetail() {
                 <Input
                   type="number"
                   step="0.01"
-                  value={editForm.electricity_rate}
-                  onChange={(e) => setEditForm({ ...editForm, electricity_rate: e.target.value })}
+                  value={editRoomForm.electricity_rate}
+                  onChange={(e) => setEditRoomForm({ ...editRoomForm, electricity_rate: e.target.value })}
                 />
               </div>
               <Button 
-                onClick={handleEdit} 
+                onClick={handleEditRoom} 
                 disabled={updateTenant.isPending}
                 className="w-full"
               >
@@ -710,7 +1072,77 @@ export default function TenantDetail() {
           </DialogContent>
         </Dialog>
 
-        {/* Discontinue Dialog */}
+        {/* Edit Member Dialog */}
+        <Dialog open={editMemberDialogOpen} onOpenChange={setEditMemberDialogOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Member Details</DialogTitle>
+            </DialogHeader>
+            {renderMemberEditForm(editMemberForm, setEditMemberForm as any, editFrontRef, editBackRef)}
+            <Button 
+              onClick={handleEditMember} 
+              disabled={!editMemberForm.name.trim() || !editMemberForm.phone.trim()}
+              className="w-full mt-4"
+            >
+              Save Member Details
+            </Button>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Member Dialog */}
+        <Dialog open={addMemberDialogOpen} onOpenChange={setAddMemberDialogOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New Member</DialogTitle>
+            </DialogHeader>
+            {renderMemberEditForm(newMemberForm, setNewMemberForm as any, addFrontRef, addBackRef)}
+            <Button 
+              onClick={handleAddMember} 
+              disabled={!newMemberForm.name.trim() || !newMemberForm.phone.trim()}
+              className="w-full mt-4"
+            >
+              Add Member to Room
+            </Button>
+          </DialogContent>
+        </Dialog>
+
+        {/* Discontinue Member Dialog */}
+        <Dialog open={discontinueMemberDialogOpen} onOpenChange={setDiscontinueMemberDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Discontinue Member</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-4">
+              <p className="text-sm text-muted-foreground">
+                This will mark the member as inactive. The room will remain active with the remaining member(s). 
+                All financial data will remain unchanged.
+              </p>
+              {discontinueMemberIndex >= 0 && allMembers[discontinueMemberIndex] && (
+                <p className="font-medium">
+                  Member: {allMembers[discontinueMemberIndex].name}
+                </p>
+              )}
+              <div className="flex gap-3">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setDiscontinueMemberDialogOpen(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  variant="destructive"
+                  onClick={handleDiscontinueMember} 
+                  className="flex-1"
+                >
+                  Discontinue Member
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Discontinue Room Dialog */}
         <Dialog open={discontinueDialogOpen} onOpenChange={setDiscontinueDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -754,22 +1186,26 @@ export default function TenantDetail() {
         <Dialog open={aadhaarDialogOpen} onOpenChange={setAadhaarDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Aadhaar Card - {aadhaarUrls.memberName}</DialogTitle>
+              <div className="flex items-center justify-between">
+                <DialogTitle>Aadhaar Card - {aadhaarUrls.memberName}</DialogTitle>
+                {(aadhaarUrls.front && aadhaarUrls.back) && (
+                  <Button onClick={downloadAadhaarCombined} variant="outline" size="sm">
+                    <Download className="h-4 w-4 mr-2" />
+                    Download Aadhaar
+                  </Button>
+                )}
+                {(aadhaarUrls.front && !aadhaarUrls.back) || (!aadhaarUrls.front && aadhaarUrls.back) && (
+                  <Button onClick={downloadAadhaarCombined} variant="outline" size="sm">
+                    <Download className="h-4 w-4 mr-2" />
+                    Download
+                  </Button>
+                )}
+              </div>
             </DialogHeader>
             <div className="space-y-4 mt-4">
               {aadhaarUrls.front && (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">Front Side</p>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => downloadAadhaar(aadhaarUrls.front!, aadhaarUrls.memberName || 'Member', 'front')}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download
-                    </Button>
-                  </div>
+                  <p className="font-medium">Front Side</p>
                   <img 
                     src={aadhaarUrls.front} 
                     alt="Aadhaar Front" 
@@ -779,17 +1215,7 @@ export default function TenantDetail() {
               )}
               {aadhaarUrls.back && (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">Back Side</p>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => downloadAadhaar(aadhaarUrls.back!, aadhaarUrls.memberName || 'Member', 'back')}
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download
-                    </Button>
-                  </div>
+                  <p className="font-medium">Back Side</p>
                   <img 
                     src={aadhaarUrls.back} 
                     alt="Aadhaar Back" 

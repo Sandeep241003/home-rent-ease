@@ -20,7 +20,7 @@ interface LayoutProps {
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/tenants', icon: Users, label: 'Tenants' },
-  { href: '/ledger', icon: FileText, label: 'Ledger' },
+  { href: '/history', icon: FileText, label: 'History' },
 ];
 
 export function Layout({ children }: LayoutProps) {

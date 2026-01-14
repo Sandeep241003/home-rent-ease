@@ -134,9 +134,9 @@ export default function Dashboard() {
               </Link>
             </Button>
             <Button asChild className="h-auto py-4" variant="outline">
-              <Link to="/ledger" className="flex flex-col items-center gap-2">
+              <Link to="/history" className="flex flex-col items-center gap-2">
                 <FileText className="h-6 w-6" />
-                <span>View Ledger</span>
+                <span>View History</span>
               </Link>
             </Button>
           </div>
