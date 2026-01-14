@@ -10,7 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Tenants from "./pages/Tenants";
 import AddTenant from "./pages/AddTenant";
 import TenantDetail from "./pages/TenantDetail";
-import Ledger from "./pages/Ledger";
+import History from "./pages/History";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -58,13 +58,15 @@ const App = () => (
               }
             />
             <Route
-              path="/ledger"
+              path="/history"
               element={
                 <ProtectedRoute>
-                  <Ledger />
+                  <History />
                 </ProtectedRoute>
               }
             />
+            {/* Redirect old /ledger route to /history */}
+            <Route path="/ledger" element={<Navigate to="/history" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

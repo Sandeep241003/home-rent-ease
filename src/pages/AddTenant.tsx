@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { 
   Select,
   SelectContent,
@@ -13,11 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, ArrowRight, Upload, User, Check, Users, Home } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Upload, User, Check, Users, Home, CalendarIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 interface MemberData {
   name: string;
@@ -33,6 +37,7 @@ interface RoomData {
   monthly_rent: string;
   electricity_rate: string;
   initial_meter_reading: string;
+  joining_date: Date;
 }
 
 const emptyMember: MemberData = {
@@ -49,6 +54,7 @@ const emptyRoom: RoomData = {
   monthly_rent: '',
   electricity_rate: '',
   initial_meter_reading: '0',
+  joining_date: new Date(),
 };
 
 type Step = 'count' | 'member1' | 'member2' | 'room';
@@ -151,6 +157,9 @@ export default function AddTenant() {
         });
       }
 
+      // Use the selected joining date
+      const joiningDateStr = format(roomData.joining_date, 'yyyy-MM-dd');
+
       // Add tenant with room data and members
       await addTenant.mutateAsync({
         name: members.map(m => m.name).join(' & '),
@@ -159,7 +168,7 @@ export default function AddTenant() {
         monthly_rent: parseFloat(roomData.monthly_rent) || 0,
         electricity_rate: parseFloat(roomData.electricity_rate) || 0,
         initial_meter_reading: parseFloat(roomData.initial_meter_reading) || 0,
-        joining_date: new Date().toISOString().split('T')[0],
+        joining_date: joiningDateStr,
         gender: member1.gender || undefined,
         occupation: member1.occupation || undefined,
         aadhaar_image_url: member1FrontUrl,
@@ -497,9 +506,35 @@ export default function AddTenant() {
                 />
               </div>
 
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">Joining Date</p>
-                <p className="font-medium">{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+              {/* Joining Date Picker */}
+              <div className="space-y-2">
+                <Label>Joining Date (Optional)</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !roomData.joining_date && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {roomData.joining_date ? format(roomData.joining_date, "PPP") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={roomData.joining_date}
+                      onSelect={(date) => date && setRoomData({ ...roomData, joining_date: date })}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-muted-foreground">
+                  Pre-selected to current date. Change only if needed.
+                </p>
               </div>
 
               <div className="flex gap-3 pt-4">

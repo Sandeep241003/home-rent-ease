@@ -47,6 +47,7 @@ export function usePayments(tenantId?: string) {
       paymentReason,
       reasonNotes,
       paymentDate,
+      paidBy,
     }: { 
       tenantId: string; 
       amount: number; 
@@ -54,6 +55,7 @@ export function usePayments(tenantId?: string) {
       paymentReason: string;
       reasonNotes?: string;
       paymentDate: string;
+      paidBy?: string;
     }) => {
       // Get current tenant
       const { data: tenant, error: tenantError } = await supabase
@@ -74,6 +76,7 @@ export function usePayments(tenantId?: string) {
           payment_reason: paymentReason,
           reason_notes: reasonNotes || null,
           payment_date: paymentDate,
+          paid_by: paidBy || null,
         });
       
       if (paymentError) throw paymentError;
@@ -121,10 +124,12 @@ export function usePayments(tenantId?: string) {
         ? reasonNotes 
         : paymentReason;
       
+      const paidByText = paidBy ? ` by ${paidBy}` : '';
+      
       await supabase.from('activity_log').insert({
         tenant_id: tenantId,
         event_type: 'PAYMENT_RECEIVED',
-        description: `Payment received: ₹${amount.toLocaleString('en-IN')} via ${paymentMode} for ${reasonText} (Date: ${formattedDate})`,
+        description: `Payment received${paidByText}: ₹${amount.toLocaleString('en-IN')} via ${paymentMode} for ${reasonText} (Date: ${formattedDate})`,
         amount,
       });
 

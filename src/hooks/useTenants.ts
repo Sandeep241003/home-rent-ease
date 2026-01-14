@@ -10,6 +10,7 @@ export interface Member {
   occupation: string;
   aadhaar_front_url?: string;
   aadhaar_back_url?: string;
+  is_active?: boolean;
 }
 
 export interface Tenant {
@@ -68,7 +69,6 @@ export function useTenants() {
       
       if (error) throw error;
       
-      // Parse members JSON for each tenant
       return (data || []).map(tenant => ({
         ...tenant,
         members: Array.isArray(tenant.members) ? tenant.members : 
@@ -87,7 +87,6 @@ export function useTenants() {
       const joinedMonth = joiningDate.getMonth() + 1;
       const joinedYear = joiningDate.getFullYear();
 
-      // Determine if first month rent should be added
       const shouldAddFirstRent = 
         joinedYear < currentYear || 
         (joinedYear === currentYear && joinedMonth <= currentMonth);
@@ -118,7 +117,6 @@ export function useTenants() {
       
       if (error) throw error;
 
-      // Log room created
       const memberCount = data.members?.length || 0;
       const memberNames = data.members?.map(m => m.name).join(', ') || data.name;
       
@@ -129,7 +127,6 @@ export function useTenants() {
         amount: null,
       });
 
-      // Add first month rent entry if applicable
       if (shouldAddFirstRent) {
         await supabase.from('monthly_rent_entries').insert({
           tenant_id: newTenant.id,
@@ -172,7 +169,6 @@ export function useTenants() {
       discontinued_reason: string;
       discontinued_at: string;
     }> }) => {
-      // Get current tenant for logging
       const { data: currentTenant } = await supabase
         .from('tenants')
         .select('is_active, name, room_number')
@@ -186,7 +182,6 @@ export function useTenants() {
       
       if (error) throw error;
 
-      // Log deactivation/reactivation
       if (currentTenant && data.is_active !== undefined && data.is_active !== currentTenant.is_active) {
         const eventType = data.is_active ? 'TENANT_REACTIVATED' : 'TENANT_DEACTIVATED';
         const description = data.is_active 
@@ -211,12 +206,70 @@ export function useTenants() {
     },
   });
 
+  const updateMembers = useMutation({
+    mutationFn: async ({ tenantId, members, action, memberName }: { 
+      tenantId: string; 
+      members: Member[];
+      action: 'add' | 'edit' | 'discontinue';
+      memberName: string;
+    }) => {
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('room_number, name')
+        .eq('id', tenantId)
+        .single();
+
+      const activeMembers = members.filter(m => m.is_active !== false);
+      const newName = activeMembers.map(m => m.name).join(' & ');
+
+      const { error } = await supabase
+        .from('tenants')
+        .update({ 
+          members: JSON.parse(JSON.stringify(members)),
+          name: newName,
+        })
+        .eq('id', tenantId);
+      
+      if (error) throw error;
+
+      let eventType = 'MEMBER_UPDATED';
+      let description = '';
+
+      if (action === 'add') {
+        eventType = 'MEMBER_ADDED';
+        description = `New member added to Room ${tenant?.room_number}: ${memberName}`;
+      } else if (action === 'discontinue') {
+        eventType = 'MEMBER_DISCONTINUED';
+        description = `Member discontinued from Room ${tenant?.room_number}: ${memberName}`;
+      } else {
+        eventType = 'MEMBER_UPDATED';
+        description = `Member details updated in Room ${tenant?.room_number}: ${memberName}`;
+      }
+
+      await supabase.from('activity_log').insert({
+        tenant_id: tenantId,
+        event_type: eventType,
+        description,
+        amount: null,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
+      toast({ title: 'Member updated successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error updating member', description: error.message, variant: 'destructive' });
+    },
+  });
+
   return {
     tenants: tenantsQuery.data ?? [],
     isLoading: tenantsQuery.isLoading,
     error: tenantsQuery.error,
     addTenant,
     updateTenant,
+    updateMembers,
     refetch: tenantsQuery.refetch,
   };
 }

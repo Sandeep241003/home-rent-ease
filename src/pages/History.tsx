@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/table';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { History, FileSpreadsheet, PiggyBank } from 'lucide-react';
+import { History as HistoryIcon, FileSpreadsheet, PiggyBank } from 'lucide-react';
 
 interface MonthlyRentEntry {
   id: string;
@@ -36,7 +36,7 @@ interface MonthlyRentEntry {
   created_at: string;
 }
 
-export default function Ledger() {
+export default function History() {
   const { tenants, isLoading: tenantsLoading } = useTenants();
   const [selectedTenantId, setSelectedTenantId] = useState<string>('all');
   
@@ -90,8 +90,8 @@ export default function Ledger() {
     return new Date(2000, month - 1).toLocaleString('en-IN', { month: 'long' });
   };
 
-  // Build ledger data per tenant
-  const getLedgerData = (tenantId: string) => {
+  // Build history data per tenant
+  const getHistoryData = (tenantId: string) => {
     const tenantRentEntries = allRentEntries.filter(e => e.tenant_id === tenantId);
     const tenantPayments = payments.filter(p => p.tenant_id === tenantId);
     const tenantReadings = readings.filter(r => r.tenant_id === tenantId);
@@ -145,7 +145,7 @@ export default function Ledger() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Ledger</h1>
+            <h1 className="text-2xl font-bold tracking-tight">History</h1>
             <p className="text-muted-foreground">
               Complete financial records and activity history
             </p>
@@ -168,12 +168,12 @@ export default function Ledger() {
         <Tabs defaultValue="history">
           <TabsList>
             <TabsTrigger value="history" className="flex items-center gap-2">
-              <History className="h-4 w-4" />
+              <HistoryIcon className="h-4 w-4" />
               Activity Log
             </TabsTrigger>
-            <TabsTrigger value="ledger" className="flex items-center gap-2">
+            <TabsTrigger value="monthly" className="flex items-center gap-2">
               <FileSpreadsheet className="h-4 w-4" />
-              Month-wise Ledger
+              Month-wise History
             </TabsTrigger>
           </TabsList>
 
@@ -181,7 +181,7 @@ export default function Ledger() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <History className="h-5 w-5" />
+                  <HistoryIcon className="h-5 w-5" />
                   Complete Activity History
                 </CardTitle>
               </CardHeader>
@@ -195,7 +195,7 @@ export default function Ledger() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="ledger" className="mt-6">
+          <TabsContent value="monthly" className="mt-6">
             {filteredTenants.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center text-muted-foreground">
@@ -205,7 +205,7 @@ export default function Ledger() {
             ) : (
               <div className="space-y-6">
                 {filteredTenants.map((tenant) => {
-                  const { months } = getLedgerData(tenant.id);
+                  const { months } = getHistoryData(tenant.id);
                   
                   return (
                     <Card key={tenant.id}>
