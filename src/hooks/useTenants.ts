@@ -263,6 +263,47 @@ export function useTenants() {
     },
   });
 
+  const applyConcession = useMutation({
+    mutationFn: async ({ tenantId, amount, reason }: { 
+      tenantId: string; 
+      amount: number;
+      reason: string;
+    }) => {
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('room_number, pending_amount')
+        .eq('id', tenantId)
+        .single();
+
+      if (!tenant) throw new Error('Tenant not found');
+      if (amount > tenant.pending_amount) throw new Error('Concession cannot exceed pending amount');
+
+      const newPending = tenant.pending_amount - amount;
+
+      const { error } = await supabase
+        .from('tenants')
+        .update({ pending_amount: newPending })
+        .eq('id', tenantId);
+      
+      if (error) throw error;
+
+      await supabase.from('activity_log').insert({
+        tenant_id: tenantId,
+        event_type: 'CONCESSION_APPLIED',
+        description: `Concession of ₹${amount.toLocaleString('en-IN')} applied to Room ${tenant.room_number}: ${reason}`,
+        amount: -amount,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
+      toast({ title: 'Concession applied successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error applying concession', description: error.message, variant: 'destructive' });
+    },
+  });
+
   return {
     tenants: tenantsQuery.data ?? [],
     isLoading: tenantsQuery.isLoading,
@@ -270,6 +311,7 @@ export function useTenants() {
     addTenant,
     updateTenant,
     updateMembers,
+    applyConcession,
     refetch: tenantsQuery.refetch,
   };
 }
