@@ -26,7 +26,11 @@ export default function Tenants() {
 
   const getMemberCount = (tenant: typeof tenants[0]) => {
     if (Array.isArray(tenant.members) && tenant.members.length > 0) {
-      return tenant.members.length;
+      // Only count active members
+      const activeMembers = tenant.members.filter(
+        (member: any) => member.is_active !== false
+      );
+      return activeMembers.length || 1;
     }
     return 1;
   };
