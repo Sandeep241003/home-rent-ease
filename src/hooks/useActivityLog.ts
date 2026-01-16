@@ -10,7 +10,11 @@ export type EventType =
   | 'EXTRA_ADDED'
   | 'EXTRA_ADJUSTED'
   | 'TENANT_DEACTIVATED'
-  | 'TENANT_REACTIVATED';
+  | 'TENANT_REACTIVATED'
+  | 'MEMBER_ADDED'
+  | 'MEMBER_DISCONTINUED'
+  | 'MEMBER_UPDATED'
+  | 'CONCESSION_APPLIED';
 
 export interface ActivityLog {
   id: string;
