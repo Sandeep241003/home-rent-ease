@@ -8,8 +8,7 @@ export interface Member {
   phone: string;
   gender: string;
   occupation: string;
-  aadhaar_front_url?: string;
-  aadhaar_back_url?: string;
+  aadhaar_pdf_url?: string;
   is_active?: boolean;
 }
 

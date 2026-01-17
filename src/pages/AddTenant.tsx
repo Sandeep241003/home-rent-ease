@@ -28,8 +28,7 @@ interface MemberData {
   phone: string;
   gender: string;
   occupation: string;
-  aadhaar_front_file: File | null;
-  aadhaar_back_file: File | null;
+  aadhaar_pdf_file: File | null;
 }
 
 interface RoomData {
@@ -45,8 +44,7 @@ const emptyMember: MemberData = {
   phone: '',
   gender: '',
   occupation: '',
-  aadhaar_front_file: null,
-  aadhaar_back_file: null,
+  aadhaar_pdf_file: null,
 };
 
 const emptyRoom: RoomData = {
@@ -72,20 +70,17 @@ export default function AddTenant() {
   const [roomData, setRoomData] = useState<RoomData>({ ...emptyRoom });
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const frontFileRef1 = useRef<HTMLInputElement>(null);
-  const backFileRef1 = useRef<HTMLInputElement>(null);
-  const frontFileRef2 = useRef<HTMLInputElement>(null);
-  const backFileRef2 = useRef<HTMLInputElement>(null);
+  const pdfFileRef1 = useRef<HTMLInputElement>(null);
+  const pdfFileRef2 = useRef<HTMLInputElement>(null);
 
-  const uploadAadhaarImage = async (file: File): Promise<string | undefined> => {
+  const uploadAadhaarPdf = async (file: File): Promise<string | undefined> => {
     if (!user) return undefined;
     
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
+    const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.pdf`;
     
     const { error: uploadError } = await supabase.storage
       .from('aadhaar-images')
-      .upload(fileName, file);
+      .upload(fileName, file, { contentType: 'application/pdf' });
 
     if (!uploadError) {
       return fileName;
@@ -113,15 +108,11 @@ export default function AddTenant() {
     setIsSubmitting(true);
 
     try {
-      // Upload Aadhaar images for member 1
-      let member1FrontUrl: string | undefined;
-      let member1BackUrl: string | undefined;
+      // Upload Aadhaar PDF for member 1
+      let member1PdfUrl: string | undefined;
       
-      if (member1.aadhaar_front_file) {
-        member1FrontUrl = await uploadAadhaarImage(member1.aadhaar_front_file);
-      }
-      if (member1.aadhaar_back_file) {
-        member1BackUrl = await uploadAadhaarImage(member1.aadhaar_back_file);
+      if (member1.aadhaar_pdf_file) {
+        member1PdfUrl = await uploadAadhaarPdf(member1.aadhaar_pdf_file);
       }
 
       const members: Member[] = [
@@ -130,21 +121,16 @@ export default function AddTenant() {
           phone: member1.phone.trim(),
           gender: member1.gender,
           occupation: member1.occupation,
-          aadhaar_front_url: member1FrontUrl,
-          aadhaar_back_url: member1BackUrl,
+          aadhaar_pdf_url: member1PdfUrl,
         }
       ];
 
-      // Upload Aadhaar images for member 2 if exists
+      // Upload Aadhaar PDF for member 2 if exists
       if (memberCount === 2) {
-        let member2FrontUrl: string | undefined;
-        let member2BackUrl: string | undefined;
+        let member2PdfUrl: string | undefined;
         
-        if (member2.aadhaar_front_file) {
-          member2FrontUrl = await uploadAadhaarImage(member2.aadhaar_front_file);
-        }
-        if (member2.aadhaar_back_file) {
-          member2BackUrl = await uploadAadhaarImage(member2.aadhaar_back_file);
+        if (member2.aadhaar_pdf_file) {
+          member2PdfUrl = await uploadAadhaarPdf(member2.aadhaar_pdf_file);
         }
 
         members.push({
@@ -152,8 +138,7 @@ export default function AddTenant() {
           phone: member2.phone.trim(),
           gender: member2.gender,
           occupation: member2.occupation,
-          aadhaar_front_url: member2FrontUrl,
-          aadhaar_back_url: member2BackUrl,
+          aadhaar_pdf_url: member2PdfUrl,
         });
       }
 
@@ -171,8 +156,6 @@ export default function AddTenant() {
         joining_date: joiningDateStr,
         gender: member1.gender || undefined,
         occupation: member1.occupation || undefined,
-        aadhaar_image_url: member1FrontUrl,
-        aadhaar_back_image_url: member1BackUrl,
         members,
       });
 
@@ -235,8 +218,7 @@ export default function AddTenant() {
     member: MemberData, 
     setMember: React.Dispatch<React.SetStateAction<MemberData>>,
     memberNumber: number,
-    frontRef: React.RefObject<HTMLInputElement>,
-    backRef: React.RefObject<HTMLInputElement>
+    pdfRef: React.RefObject<HTMLInputElement>
   ) => (
     <Card>
       <CardHeader>
@@ -300,24 +282,24 @@ export default function AddTenant() {
           </div>
         </div>
 
-        {/* Aadhaar Upload - Front */}
+        {/* Aadhaar PDF Upload */}
         <div className="space-y-2">
-          <Label>Aadhaar Card (Front Side)</Label>
+          <Label>Aadhaar Card (Scanned PDF)</Label>
           <div 
             className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
-            onClick={() => frontRef.current?.click()}
+            onClick={() => pdfRef.current?.click()}
           >
             <input
-              ref={frontRef}
+              ref={pdfRef}
               type="file"
-              accept="image/*"
-              onChange={(e) => setMember({ ...member, aadhaar_front_file: e.target.files?.[0] || null })}
+              accept="application/pdf"
+              onChange={(e) => setMember({ ...member, aadhaar_pdf_file: e.target.files?.[0] || null })}
               className="hidden"
             />
-            {member.aadhaar_front_file ? (
+            {member.aadhaar_pdf_file ? (
               <div className="flex items-center justify-center gap-2 text-primary">
                 <Check className="h-5 w-5" />
-                <span className="text-sm">{member.aadhaar_front_file.name}</span>
+                <span className="text-sm">{member.aadhaar_pdf_file.name}</span>
               </div>
             ) : (
               <div className="space-y-1">
@@ -326,34 +308,9 @@ export default function AddTenant() {
               </div>
             )}
           </div>
-        </div>
-
-        {/* Aadhaar Upload - Back */}
-        <div className="space-y-2">
-          <Label>Aadhaar Card (Back Side)</Label>
-          <div 
-            className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
-            onClick={() => backRef.current?.click()}
-          >
-            <input
-              ref={backRef}
-              type="file"
-              accept="image/*"
-              onChange={(e) => setMember({ ...member, aadhaar_back_file: e.target.files?.[0] || null })}
-              className="hidden"
-            />
-            {member.aadhaar_back_file ? (
-              <div className="flex items-center justify-center gap-2 text-primary">
-                <Check className="h-5 w-5" />
-                <span className="text-sm">{member.aadhaar_back_file.name}</span>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <Upload className="h-6 w-6 mx-auto text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Click to upload (optional)</p>
-              </div>
-            )}
-          </div>
+          <p className="text-xs text-muted-foreground">
+            Scanned PDF recommended. You may use apps like Adobe Scan or Google Drive Scan.
+          </p>
         </div>
 
         <div className="flex gap-3 pt-4">
@@ -438,8 +395,8 @@ export default function AddTenant() {
           </Card>
         )}
 
-        {step === 'member1' && renderMemberForm(member1, setMember1, 1, frontFileRef1, backFileRef1)}
-        {step === 'member2' && renderMemberForm(member2, setMember2, 2, frontFileRef2, backFileRef2)}
+        {step === 'member1' && renderMemberForm(member1, setMember1, 1, pdfFileRef1)}
+        {step === 'member2' && renderMemberForm(member2, setMember2, 2, pdfFileRef2)}
 
         {step === 'room' && (
           <Card>
