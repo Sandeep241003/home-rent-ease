@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -19,16 +19,28 @@ export default function Login() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Check if any landlord exists
-  useState(() => {
-    const checkExistingUser = async () => {
-      const { count } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true });
-      setHasExistingUser((count ?? 0) > 0);
+  // Check if registration is open via secure edge function
+  useEffect(() => {
+    const checkRegistrationStatus = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('check-registration-status');
+        
+        if (error) {
+          console.error('Error checking registration status:', error);
+          // Default to showing login only on error
+          setHasExistingUser(true);
+          return;
+        }
+        
+        // registrationOpen = true means no existing user, so hasExistingUser = false
+        setHasExistingUser(!data?.registrationOpen);
+      } catch (error) {
+        console.error('Error checking registration status:', error);
+        setHasExistingUser(true);
+      }
     };
-    checkExistingUser();
-  });
+    checkRegistrationStatus();
+  }, []);
 
   if (user) {
     return <Navigate to="/dashboard" replace />;
