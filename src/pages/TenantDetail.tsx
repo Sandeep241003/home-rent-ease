@@ -103,11 +103,10 @@ export default function TenantDetail() {
     phone: '',
     gender: '',
     occupation: '',
-    aadhaar_front_file: null as File | null,
-    aadhaar_back_file: null as File | null,
+    aadhaar_pdf_file: null as File | null,
+    remove_aadhaar: false,
   });
-  const editFrontRef = useRef<HTMLInputElement>(null);
-  const editBackRef = useRef<HTMLInputElement>(null);
+  const editPdfRef = useRef<HTMLInputElement>(null);
 
   const [addMemberDialogOpen, setAddMemberDialogOpen] = useState(false);
   const [newMemberForm, setNewMemberForm] = useState({
@@ -115,11 +114,12 @@ export default function TenantDetail() {
     phone: '',
     gender: '',
     occupation: '',
-    aadhaar_front_file: null as File | null,
-    aadhaar_back_file: null as File | null,
+    aadhaar_pdf_file: null as File | null,
   });
-  const addFrontRef = useRef<HTMLInputElement>(null);
-  const addBackRef = useRef<HTMLInputElement>(null);
+  const addPdfRef = useRef<HTMLInputElement>(null);
+
+  const [removeAadhaarDialogOpen, setRemoveAadhaarDialogOpen] = useState(false);
+  const [removeAadhaarMemberIndex, setRemoveAadhaarMemberIndex] = useState<number>(-1);
 
   const [discontinueMemberDialogOpen, setDiscontinueMemberDialogOpen] = useState(false);
   const [discontinueMemberIndex, setDiscontinueMemberIndex] = useState<number>(-1);
@@ -134,7 +134,7 @@ export default function TenantDetail() {
   const [editTenantDialogOpen, setEditTenantDialogOpen] = useState(false);
 
   const [aadhaarDialogOpen, setAadhaarDialogOpen] = useState(false);
-  const [aadhaarUrls, setAadhaarUrls] = useState<{ front?: string; back?: string; memberName?: string }>({});
+  const [aadhaarPdfUrl, setAadhaarPdfUrl] = useState<{ url?: string; memberName?: string; roomNumber?: string }>({});
 
   const tenant = tenants.find(t => t.id === id);
 
@@ -159,23 +159,21 @@ export default function TenantDetail() {
         phone: tenant.phone,
         gender: tenant.gender || '',
         occupation: tenant.occupation || '',
-        aadhaar_front_url: tenant.aadhaar_image_url?.split('/aadhaar-images/').pop(),
-        aadhaar_back_url: tenant.aadhaar_back_image_url?.split('/aadhaar-images/').pop(),
+        aadhaar_pdf_url: undefined,
         is_active: true,
       }];
 
   const activeMembers = allMembers.filter(m => m.is_active !== false);
   const displayedMembers = showDiscontinuedMembers ? allMembers : activeMembers;
 
-  const uploadAadhaarImage = async (file: File): Promise<string | undefined> => {
+  const uploadAadhaarPdf = async (file: File): Promise<string | undefined> => {
     if (!user) return undefined;
     
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
+    const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.pdf`;
     
     const { error: uploadError } = await supabase.storage
       .from('aadhaar-images')
-      .upload(fileName, file);
+      .upload(fileName, file, { contentType: 'application/pdf' });
 
     if (!uploadError) {
       return fileName;
@@ -257,8 +255,8 @@ export default function TenantDetail() {
       phone: member.phone,
       gender: member.gender || '',
       occupation: member.occupation || '',
-      aadhaar_front_file: null,
-      aadhaar_back_file: null,
+      aadhaar_pdf_file: null,
+      remove_aadhaar: false,
     });
     setEditMemberDialogOpen(true);
   };
@@ -267,14 +265,14 @@ export default function TenantDetail() {
     if (!updateMembers) return;
     
     const updatedMembers = [...allMembers];
-    let frontUrl = allMembers[editMemberIndex].aadhaar_front_url;
-    let backUrl = allMembers[editMemberIndex].aadhaar_back_url;
+    let pdfUrl = allMembers[editMemberIndex].aadhaar_pdf_url;
+    const previousPdfUrl = pdfUrl;
 
-    if (editMemberForm.aadhaar_front_file) {
-      frontUrl = await uploadAadhaarImage(editMemberForm.aadhaar_front_file);
-    }
-    if (editMemberForm.aadhaar_back_file) {
-      backUrl = await uploadAadhaarImage(editMemberForm.aadhaar_back_file);
+    // Handle remove aadhaar
+    if (editMemberForm.remove_aadhaar) {
+      pdfUrl = undefined;
+    } else if (editMemberForm.aadhaar_pdf_file) {
+      pdfUrl = await uploadAadhaarPdf(editMemberForm.aadhaar_pdf_file);
     }
 
     updatedMembers[editMemberIndex] = {
@@ -283,8 +281,7 @@ export default function TenantDetail() {
       phone: editMemberForm.phone,
       gender: editMemberForm.gender,
       occupation: editMemberForm.occupation,
-      aadhaar_front_url: frontUrl,
-      aadhaar_back_url: backUrl,
+      aadhaar_pdf_url: pdfUrl,
     };
 
     await updateMembers.mutateAsync({
@@ -294,14 +291,35 @@ export default function TenantDetail() {
       memberName: editMemberForm.name,
     });
 
+    // Log Aadhaar changes
+    if (editMemberForm.remove_aadhaar && previousPdfUrl) {
+      await supabase.from('activity_log').insert({
+        tenant_id: tenant.id,
+        event_type: 'AADHAAR_REMOVED',
+        description: `Aadhaar document removed for ${editMemberForm.name}`,
+        amount: null,
+      });
+    } else if (editMemberForm.aadhaar_pdf_file) {
+      const eventType = previousPdfUrl ? 'AADHAAR_REPLACED' : 'AADHAAR_UPLOADED';
+      const description = previousPdfUrl 
+        ? `Aadhaar document replaced for ${editMemberForm.name}`
+        : `Aadhaar document uploaded for ${editMemberForm.name}`;
+      await supabase.from('activity_log').insert({
+        tenant_id: tenant.id,
+        event_type: eventType,
+        description,
+        amount: null,
+      });
+    }
+
     setEditMemberDialogOpen(false);
     setEditMemberForm({
       name: '',
       phone: '',
       gender: '',
       occupation: '',
-      aadhaar_front_file: null,
-      aadhaar_back_file: null,
+      aadhaar_pdf_file: null,
+      remove_aadhaar: false,
     });
   };
 
@@ -312,14 +330,10 @@ export default function TenantDetail() {
       return;
     }
 
-    let frontUrl: string | undefined;
-    let backUrl: string | undefined;
+    let pdfUrl: string | undefined;
 
-    if (newMemberForm.aadhaar_front_file) {
-      frontUrl = await uploadAadhaarImage(newMemberForm.aadhaar_front_file);
-    }
-    if (newMemberForm.aadhaar_back_file) {
-      backUrl = await uploadAadhaarImage(newMemberForm.aadhaar_back_file);
+    if (newMemberForm.aadhaar_pdf_file) {
+      pdfUrl = await uploadAadhaarPdf(newMemberForm.aadhaar_pdf_file);
     }
 
     const newMember: Member = {
@@ -327,8 +341,7 @@ export default function TenantDetail() {
       phone: newMemberForm.phone,
       gender: newMemberForm.gender,
       occupation: newMemberForm.occupation,
-      aadhaar_front_url: frontUrl,
-      aadhaar_back_url: backUrl,
+      aadhaar_pdf_url: pdfUrl,
     };
 
     const updatedMembers = [...allMembers, { ...newMember, is_active: true }];
@@ -340,14 +353,23 @@ export default function TenantDetail() {
       memberName: newMemberForm.name,
     });
 
+    // Log Aadhaar upload if uploaded
+    if (newMemberForm.aadhaar_pdf_file && pdfUrl) {
+      await supabase.from('activity_log').insert({
+        tenant_id: tenant.id,
+        event_type: 'AADHAAR_UPLOADED',
+        description: `Aadhaar document uploaded for ${newMemberForm.name}`,
+        amount: null,
+      });
+    }
+
     setAddMemberDialogOpen(false);
     setNewMemberForm({
       name: '',
       phone: '',
       gender: '',
       occupation: '',
-      aadhaar_front_file: null,
-      aadhaar_back_file: null,
+      aadhaar_pdf_file: null,
     });
   };
 
@@ -419,87 +441,38 @@ export default function TenantDetail() {
   };
 
   const viewAadhaar = async (member: Member, memberName: string) => {
-    const urls: { front?: string; back?: string; memberName?: string } = { memberName };
-    
-    if (member.aadhaar_front_url) {
+    if (member.aadhaar_pdf_url) {
       const { data } = await supabase.storage
         .from('aadhaar-images')
-        .createSignedUrl(member.aadhaar_front_url, 300);
+        .createSignedUrl(member.aadhaar_pdf_url, 300);
       if (data?.signedUrl) {
-        urls.front = data.signedUrl;
+        setAadhaarPdfUrl({ 
+          url: data.signedUrl, 
+          memberName,
+          roomNumber: tenant.room_number 
+        });
+        setAadhaarDialogOpen(true);
       }
-    }
-    
-    if (member.aadhaar_back_url) {
-      const { data } = await supabase.storage
-        .from('aadhaar-images')
-        .createSignedUrl(member.aadhaar_back_url, 300);
-      if (data?.signedUrl) {
-        urls.back = data.signedUrl;
-      }
-    }
-
-    if (urls.front || urls.back) {
-      setAadhaarUrls(urls);
-      setAadhaarDialogOpen(true);
     }
   };
 
-  // Combined Aadhaar download as PDF
-  const downloadAadhaarAsPdf = async () => {
-    const memberName = aadhaarUrls.memberName?.replace(/\s+/g, '_') || 'Member';
+  const downloadAadhaarPdf = async () => {
+    if (!aadhaarPdfUrl.url) return;
+    
+    const memberName = aadhaarPdfUrl.memberName?.replace(/\s+/g, '_') || 'Member';
+    const roomNumber = aadhaarPdfUrl.roomNumber || tenant.room_number;
     
     try {
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });
-
-      const loadImage = (url: string): Promise<HTMLImageElement> => {
-        return new Promise((resolve, reject) => {
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
-          img.onload = () => resolve(img);
-          img.onerror = reject;
-          img.src = url;
-        });
-      };
-
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
-      const maxWidth = pageWidth - 2 * margin;
-      const maxHeight = pageHeight - 2 * margin - 20;
-
-      if (aadhaarUrls.front) {
-        const frontImg = await loadImage(aadhaarUrls.front);
-        const ratio = Math.min(maxWidth / frontImg.width, maxHeight / frontImg.height);
-        const imgWidth = frontImg.width * ratio;
-        const imgHeight = frontImg.height * ratio;
-        const x = (pageWidth - imgWidth) / 2;
-        
-        pdf.setFontSize(14);
-        pdf.text('Aadhaar Card - Front', pageWidth / 2, margin + 5, { align: 'center' });
-        pdf.addImage(frontImg, 'JPEG', x, margin + 15, imgWidth, imgHeight);
-      }
-
-      if (aadhaarUrls.back) {
-        if (aadhaarUrls.front) {
-          pdf.addPage();
-        }
-        const backImg = await loadImage(aadhaarUrls.back);
-        const ratio = Math.min(maxWidth / backImg.width, maxHeight / backImg.height);
-        const imgWidth = backImg.width * ratio;
-        const imgHeight = backImg.height * ratio;
-        const x = (pageWidth - imgWidth) / 2;
-        
-        pdf.setFontSize(14);
-        pdf.text('Aadhaar Card - Back', pageWidth / 2, margin + 5, { align: 'center' });
-        pdf.addImage(backImg, 'JPEG', x, margin + 15, imgWidth, imgHeight);
-      }
-
-      pdf.save(`${memberName}_Room${tenant.room_number}_Aadhaar.pdf`);
+      const response = await fetch(aadhaarPdfUrl.url);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${memberName}_Room${roomNumber}_Aadhaar.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
       toast({ title: 'Aadhaar downloaded successfully' });
     } catch (error) {
       console.error('Error downloading Aadhaar:', error);
@@ -509,9 +482,9 @@ export default function TenantDetail() {
 
   const renderMemberEditForm = (
     form: typeof editMemberForm | typeof newMemberForm,
-    setForm: React.Dispatch<React.SetStateAction<typeof editMemberForm | typeof newMemberForm>>,
-    frontRef: React.RefObject<HTMLInputElement>,
-    backRef: React.RefObject<HTMLInputElement>
+    setForm: React.Dispatch<React.SetStateAction<typeof editMemberForm>> | React.Dispatch<React.SetStateAction<typeof newMemberForm>>,
+    pdfRef: React.RefObject<HTMLInputElement>,
+    currentAadhaarUrl?: string
   ) => (
     <div className="space-y-4 pt-4 max-h-[70vh] overflow-y-auto">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -519,7 +492,7 @@ export default function TenantDetail() {
           <Label>Full Name *</Label>
           <Input
             value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            onChange={(e) => (setForm as any)({ ...form, name: e.target.value })}
             placeholder="John Doe"
           />
         </div>
@@ -527,7 +500,7 @@ export default function TenantDetail() {
           <Label>Gender</Label>
           <Select 
             value={form.gender} 
-            onValueChange={(v) => setForm({ ...form, gender: v })}
+            onValueChange={(v) => (setForm as any)({ ...form, gender: v })}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select gender" />
@@ -546,7 +519,7 @@ export default function TenantDetail() {
           <Label>Phone Number *</Label>
           <Input
             value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            onChange={(e) => (setForm as any)({ ...form, phone: e.target.value })}
             placeholder="9876543210"
           />
         </div>
@@ -554,64 +527,72 @@ export default function TenantDetail() {
           <Label>Occupation</Label>
           <Input
             value={form.occupation}
-            onChange={(e) => setForm({ ...form, occupation: e.target.value })}
+            onChange={(e) => (setForm as any)({ ...form, occupation: e.target.value })}
             placeholder="Software Engineer"
           />
         </div>
       </div>
 
+      {/* Aadhaar PDF Upload */}
       <div className="space-y-2">
-        <Label>Aadhaar Card (Front Side)</Label>
-        <div 
-          className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
-          onClick={() => frontRef.current?.click()}
-        >
-          <input
-            ref={frontRef}
-            type="file"
-            accept="image/*"
-            onChange={(e) => setForm({ ...form, aadhaar_front_file: e.target.files?.[0] || null })}
-            className="hidden"
-          />
-          {form.aadhaar_front_file ? (
-            <div className="flex items-center justify-center gap-2 text-primary">
-              <Check className="h-5 w-5" />
-              <span className="text-sm">{form.aadhaar_front_file.name}</span>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <Upload className="h-6 w-6 mx-auto text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Click to upload or replace</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Aadhaar Card (Back Side)</Label>
-        <div 
-          className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
-          onClick={() => backRef.current?.click()}
-        >
-          <input
-            ref={backRef}
-            type="file"
-            accept="image/*"
-            onChange={(e) => setForm({ ...form, aadhaar_back_file: e.target.files?.[0] || null })}
-            className="hidden"
-          />
-          {form.aadhaar_back_file ? (
-            <div className="flex items-center justify-center gap-2 text-primary">
-              <Check className="h-5 w-5" />
-              <span className="text-sm">{form.aadhaar_back_file.name}</span>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <Upload className="h-6 w-6 mx-auto text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Click to upload or replace</p>
-            </div>
-          )}
-        </div>
+        <Label>Aadhaar Card (Scanned PDF)</Label>
+        {currentAadhaarUrl && !('remove_aadhaar' in form && form.remove_aadhaar) && !form.aadhaar_pdf_file && (
+          <div className="p-3 bg-muted rounded-lg flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Aadhaar PDF already uploaded</span>
+            {'remove_aadhaar' in form && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-destructive hover:text-destructive"
+                onClick={() => (setForm as any)({ ...form, remove_aadhaar: true })}
+              >
+                Remove
+              </Button>
+            )}
+          </div>
+        )}
+        {'remove_aadhaar' in form && form.remove_aadhaar && (
+          <div className="p-3 bg-destructive/10 rounded-lg flex items-center justify-between">
+            <span className="text-sm text-destructive">Aadhaar will be removed on save</span>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => (setForm as any)({ ...form, remove_aadhaar: false })}
+            >
+              Undo
+            </Button>
+          </div>
+        )}
+        {(!currentAadhaarUrl || ('remove_aadhaar' in form && form.remove_aadhaar) || form.aadhaar_pdf_file) && (
+          <div 
+            className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={() => pdfRef.current?.click()}
+          >
+            <input
+              ref={pdfRef}
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => (setForm as any)({ ...form, aadhaar_pdf_file: e.target.files?.[0] || null })}
+              className="hidden"
+            />
+            {form.aadhaar_pdf_file ? (
+              <div className="flex items-center justify-center gap-2 text-primary">
+                <Check className="h-5 w-5" />
+                <span className="text-sm">{form.aadhaar_pdf_file.name}</span>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <Upload className="h-6 w-6 mx-auto text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  {currentAadhaarUrl ? 'Click to replace PDF' : 'Click to upload PDF (optional)'}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Scanned PDF recommended. You may use apps like Adobe Scan or Google Drive Scan.
+        </p>
       </div>
     </div>
   );
@@ -715,7 +696,7 @@ export default function TenantDetail() {
                         {member.is_active === false && <Badge variant="secondary">Discontinued</Badge>}
                       </div>
                       <div className="flex gap-1">
-                        {(member.aadhaar_front_url || member.aadhaar_back_url) && (
+                        {member.aadhaar_pdf_url && (
                           <Button 
                             variant="ghost" 
                             size="sm"
@@ -1229,7 +1210,7 @@ export default function TenantDetail() {
             <DialogHeader>
               <DialogTitle>Edit Member Details</DialogTitle>
             </DialogHeader>
-            {renderMemberEditForm(editMemberForm, setEditMemberForm as any, editFrontRef, editBackRef)}
+            {renderMemberEditForm(editMemberForm, setEditMemberForm as any, editPdfRef, allMembers[editMemberIndex]?.aadhaar_pdf_url)}
             <Button 
               onClick={handleEditMember} 
               disabled={!editMemberForm.name.trim() || !editMemberForm.phone.trim()}
@@ -1246,7 +1227,7 @@ export default function TenantDetail() {
             <DialogHeader>
               <DialogTitle>Add New Member</DialogTitle>
             </DialogHeader>
-            {renderMemberEditForm(newMemberForm, setNewMemberForm as any, addFrontRef, addBackRef)}
+            {renderMemberEditForm(newMemberForm, setNewMemberForm as any, addPdfRef)}
             <Button 
               onClick={handleAddMember} 
               disabled={!newMemberForm.name.trim() || !newMemberForm.phone.trim()}
@@ -1397,9 +1378,9 @@ export default function TenantDetail() {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <div className="flex items-center justify-between">
-                <DialogTitle>Aadhaar Card - {aadhaarUrls.memberName}</DialogTitle>
-                {(aadhaarUrls.front || aadhaarUrls.back) && (
-                  <Button onClick={downloadAadhaarAsPdf} variant="outline" size="sm">
+                <DialogTitle>Aadhaar Card - {aadhaarPdfUrl.memberName}</DialogTitle>
+                {aadhaarPdfUrl.url && (
+                  <Button onClick={downloadAadhaarPdf} variant="outline" size="sm">
                     <Download className="h-4 w-4 mr-2" />
                     Download PDF
                   </Button>
@@ -1407,23 +1388,12 @@ export default function TenantDetail() {
               </div>
             </DialogHeader>
             <div className="space-y-4 mt-4">
-              {aadhaarUrls.front && (
-                <div className="space-y-2">
-                  <p className="font-medium">Front Side</p>
-                  <img 
-                    src={aadhaarUrls.front} 
-                    alt="Aadhaar Front" 
-                    className="w-full rounded-lg border"
-                  />
-                </div>
-              )}
-              {aadhaarUrls.back && (
-                <div className="space-y-2">
-                  <p className="font-medium">Back Side</p>
-                  <img 
-                    src={aadhaarUrls.back} 
-                    alt="Aadhaar Back" 
-                    className="w-full rounded-lg border"
+              {aadhaarPdfUrl.url && (
+                <div className="w-full h-[60vh]">
+                  <iframe
+                    src={aadhaarPdfUrl.url}
+                    className="w-full h-full rounded-lg border"
+                    title="Aadhaar PDF"
                   />
                 </div>
               )}
