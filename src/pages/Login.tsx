@@ -89,11 +89,9 @@ export default function Login() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-4">
-            <div className="rounded-full bg-primary/10 p-3">
-              <Building2 className="h-8 w-8 text-primary" />
-            </div>
+            <img src="/favicon.png" alt="RentEase" className="h-16 w-16" />
           </div>
-          <CardTitle className="text-2xl font-bold">Rent Manager</CardTitle>
+          <CardTitle className="text-2xl font-bold">RentEase</CardTitle>
           <CardDescription>
             {isSignUp 
               ? 'Create your landlord account' 

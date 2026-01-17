@@ -33,8 +33,8 @@ export function Layout({ children }: LayoutProps) {
       {/* Mobile Header */}
       <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-card px-4 md:hidden">
         <Link to="/dashboard" className="flex items-center gap-2">
-          <Building2 className="h-6 w-6 text-primary" />
-          <span className="font-bold">Rent Manager</span>
+          <img src="/favicon.png" alt="RentEase" className="h-6 w-6" />
+          <span className="font-bold">RentEase</span>
         </Link>
         <Button
           variant="ghost"
@@ -81,8 +81,8 @@ export function Layout({ children }: LayoutProps) {
         {/* Desktop Sidebar */}
         <aside className="fixed left-0 top-0 z-30 hidden h-screen w-64 border-r bg-card md:block">
           <div className="flex h-16 items-center gap-2 border-b px-6">
-            <Building2 className="h-6 w-6 text-primary" />
-            <span className="font-bold text-lg">Rent Manager</span>
+            <img src="/favicon.png" alt="RentEase" className="h-6 w-6" />
+            <span className="font-bold text-lg">RentEase</span>
           </div>
           <nav className="flex flex-col gap-1 p-4">
             {navItems.map((item) => (
