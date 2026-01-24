@@ -2,3 +2,6 @@ project_id = "alcvwvdjbjyfgqrudddi"
 
 [functions.check-registration-status]
 verify_jwt = false
+
+[functions.sync-monthly-rent]
+verify_jwt = false
