@@ -21,8 +21,12 @@ export function useMonthlyRentSync() {
 
     const syncMonthlyRent = async () => {
       const now = new Date();
+      const currentDay = now.getDate();
       const currentMonth = now.getMonth() + 1;
       const currentYear = now.getFullYear();
+      
+      // Normalize today to date only (midnight)
+      const today = new Date(currentYear, now.getMonth(), currentDay);
 
       // Get all active tenants
       const { data: tenants, error: tenantsError } = await supabase
@@ -33,15 +37,37 @@ export function useMonthlyRentSync() {
       if (tenantsError || !tenants) return;
 
       for (const tenant of tenants as Tenant[]) {
-        // Check if tenant joined in current month or before
         const joiningDate = new Date(tenant.joining_date);
-        const joinedYear = joiningDate.getFullYear();
-        const joinedMonth = joiningDate.getMonth() + 1;
-
-        // Only add rent if tenant joined before or in current month
-        if (joinedYear > currentYear || (joinedYear === currentYear && joinedMonth > currentMonth)) {
+        const joiningDay = joiningDate.getDate();
+        const joiningMonth = joiningDate.getMonth() + 1;
+        const joiningYear = joiningDate.getFullYear();
+        
+        // Normalize joining date to date only (midnight)
+        const joiningDateNormalized = new Date(joiningYear, joiningDate.getMonth(), joiningDay);
+        
+        // If joining date is in the future, skip entirely
+        if (joiningDateNormalized > today) {
           continue;
         }
+        
+        // Determine if we should add rent for current month
+        let shouldAddRent = false;
+        
+        if (joiningYear === currentYear && joiningMonth === currentMonth) {
+          // Same month as joining - we already passed the joining date check above
+          shouldAddRent = true;
+        } else if (joiningDateNormalized < today) {
+          // Past the joining month - check if we've reached the rent day this month
+          // Handle months with fewer days (e.g., joining on 31st, but Feb has 28 days)
+          const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate();
+          const rentDayThisMonth = Math.min(joiningDay, lastDayOfMonth);
+          
+          if (currentDay >= rentDayThisMonth) {
+            shouldAddRent = true;
+          }
+        }
+        
+        if (!shouldAddRent) continue;
 
         // Check if rent already added for this month
         const { data: existingEntry } = await supabase
