@@ -50,97 +50,133 @@ export function useMonthlyRentSync() {
           continue;
         }
         
-        // Determine if we should add rent for current month
-        let shouldAddRent = false;
+        // Build list of all months that need rent entries (backfill logic)
+        const monthsToProcess: { month: number; year: number }[] = [];
         
-        if (joiningYear === currentYear && joiningMonth === currentMonth) {
-          // Same month as joining - we already passed the joining date check above
-          shouldAddRent = true;
-        } else if (joiningDateNormalized < today) {
-          // Past the joining month - check if we've reached the rent day this month
+        let checkYear = joiningYear;
+        let checkMonth = joiningMonth;
+
+        while (
+          checkYear < currentYear ||
+          (checkYear === currentYear && checkMonth <= currentMonth)
+        ) {
           // Handle months with fewer days (e.g., joining on 31st, but Feb has 28 days)
-          const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate();
-          const rentDayThisMonth = Math.min(joiningDay, lastDayOfMonth);
-          
-          if (currentDay >= rentDayThisMonth) {
-            shouldAddRent = true;
+          const lastDayOfCheckMonth = new Date(checkYear, checkMonth, 0).getDate();
+          const rentDayThisMonth = Math.min(joiningDay, lastDayOfCheckMonth);
+
+          let shouldConsiderThisMonth = false;
+
+          if (checkYear === joiningYear && checkMonth === joiningMonth) {
+            // Joining month: only if we're past the joining date
+            if (today >= joiningDateNormalized) {
+              shouldConsiderThisMonth = true;
+            }
+          } else if (checkYear < currentYear || (checkYear === currentYear && checkMonth < currentMonth)) {
+            // Past months: always consider (backfill)
+            shouldConsiderThisMonth = true;
+          } else if (checkYear === currentYear && checkMonth === currentMonth) {
+            // Current month: only if today >= rent day
+            if (currentDay >= rentDayThisMonth) {
+              shouldConsiderThisMonth = true;
+            }
+          }
+
+          if (shouldConsiderThisMonth) {
+            monthsToProcess.push({ month: checkMonth, year: checkYear });
+          }
+
+          // Move to next month
+          checkMonth++;
+          if (checkMonth > 12) {
+            checkMonth = 1;
+            checkYear++;
           }
         }
         
-        if (!shouldAddRent) continue;
+        // Process each month that needs a rent entry
+        for (const { month, year } of monthsToProcess) {
+          // Check if rent already added for this month
+          const { data: existingEntry } = await supabase
+            .from('monthly_rent_entries')
+            .select('id')
+            .eq('tenant_id', tenant.id)
+            .eq('month', month)
+            .eq('year', year)
+            .maybeSingle();
 
-        // Check if rent already added for this month
-        const { data: existingEntry } = await supabase
-          .from('monthly_rent_entries')
-          .select('id')
-          .eq('tenant_id', tenant.id)
-          .eq('month', currentMonth)
-          .eq('year', currentYear)
-          .maybeSingle();
+          if (existingEntry) continue; // Already added
 
-        if (existingEntry) continue; // Already added
+          // Get current tenant balances (may have changed from previous iterations)
+          const { data: currentTenantData } = await supabase
+            .from('tenants')
+            .select('pending_amount, extra_balance')
+            .eq('id', tenant.id)
+            .single();
 
-        const monthlyRent = tenant.monthly_rent;
-        const extraBalance = tenant.extra_balance || 0;
-        const currentPending = tenant.pending_amount || 0;
+          if (!currentTenantData) continue;
 
-        let newPending = currentPending;
-        let newExtraBalance = extraBalance;
-        let adjustedFromExtra = 0;
+          const monthlyRent = tenant.monthly_rent;
+          const extraBalance = currentTenantData.extra_balance || 0;
+          const currentPending = currentTenantData.pending_amount || 0;
 
-        // Apply extra balance first
-        if (extraBalance >= monthlyRent) {
-          // Extra balance covers full rent
-          newExtraBalance = extraBalance - monthlyRent;
-          adjustedFromExtra = monthlyRent;
-        } else if (extraBalance > 0) {
-          // Partial coverage from extra balance
-          adjustedFromExtra = extraBalance;
-          newPending = currentPending + (monthlyRent - extraBalance);
-          newExtraBalance = 0;
-        } else {
-          // No extra balance, add full rent to pending
-          newPending = currentPending + monthlyRent;
-        }
+          let newPending = currentPending;
+          let newExtraBalance = extraBalance;
+          let adjustedFromExtra = 0;
 
-        // Add rent entry
-        const { error: insertError } = await supabase
-          .from('monthly_rent_entries')
-          .insert({
-            tenant_id: tenant.id,
-            month: currentMonth,
-            year: currentYear,
-            rent_amount: monthlyRent,
-          });
+          // Apply extra balance first
+          if (extraBalance >= monthlyRent) {
+            // Extra balance covers full rent
+            newExtraBalance = extraBalance - monthlyRent;
+            adjustedFromExtra = monthlyRent;
+          } else if (extraBalance > 0) {
+            // Partial coverage from extra balance
+            adjustedFromExtra = extraBalance;
+            newPending = currentPending + (monthlyRent - extraBalance);
+            newExtraBalance = 0;
+          } else {
+            // No extra balance, add full rent to pending
+            newPending = currentPending + monthlyRent;
+          }
 
-        if (insertError) continue;
+          // Add rent entry
+          const { error: insertError } = await supabase
+            .from('monthly_rent_entries')
+            .insert({
+              tenant_id: tenant.id,
+              month: month,
+              year: year,
+              rent_amount: monthlyRent,
+            });
 
-        // Update tenant balances
-        await supabase
-          .from('tenants')
-          .update({
-            pending_amount: newPending,
-            extra_balance: newExtraBalance,
-          })
-          .eq('id', tenant.id);
+          if (insertError) continue;
 
-        // Log rent added
-        const monthName = new Date(currentYear, currentMonth - 1).toLocaleString('en-IN', { month: 'long' });
-        await supabase.from('activity_log').insert({
-          tenant_id: tenant.id,
-          event_type: 'RENT_ADDED',
-          description: `Monthly rent added for ${monthName} ${currentYear}: ₹${monthlyRent.toLocaleString('en-IN')}`,
-          amount: monthlyRent,
-        });
+          // Update tenant balances
+          await supabase
+            .from('tenants')
+            .update({
+              pending_amount: newPending,
+              extra_balance: newExtraBalance,
+            })
+            .eq('id', tenant.id);
 
-        // Log extra balance adjustment if any
-        if (adjustedFromExtra > 0) {
+          // Log rent added
+          const monthName = new Date(year, month - 1).toLocaleString('en-IN', { month: 'long' });
           await supabase.from('activity_log').insert({
             tenant_id: tenant.id,
-            event_type: 'EXTRA_ADJUSTED',
-            description: `Extra balance used for ${monthName} rent: ₹${adjustedFromExtra.toLocaleString('en-IN')} deducted from advance`,
-            amount: -adjustedFromExtra,
+            event_type: 'RENT_ADDED',
+            description: `Monthly rent added for ${monthName} ${year}: ₹${monthlyRent.toLocaleString('en-IN')}`,
+            amount: monthlyRent,
           });
+
+          // Log extra balance adjustment if any
+          if (adjustedFromExtra > 0) {
+            await supabase.from('activity_log').insert({
+              tenant_id: tenant.id,
+              event_type: 'EXTRA_ADJUSTED',
+              description: `Extra balance used for ${monthName} rent: ₹${adjustedFromExtra.toLocaleString('en-IN')} deducted from advance`,
+              amount: -adjustedFromExtra,
+            });
+          }
         }
       }
 
