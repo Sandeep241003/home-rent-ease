@@ -5,8 +5,10 @@ import { usePayments } from '@/hooks/usePayments';
 import { useElectricity } from '@/hooks/useElectricity';
 import { useActivityLog } from '@/hooks/useActivityLog';
 import { ActivityTimeline } from '@/components/ActivityTimeline';
+import { ReversePaymentDialog } from '@/components/ReversePaymentDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -15,6 +17,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableBody,
@@ -25,7 +33,7 @@ import {
 } from '@/components/ui/table';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { History as HistoryIcon, FileSpreadsheet, PiggyBank } from 'lucide-react';
+import { History as HistoryIcon, FileSpreadsheet, PiggyBank, MoreVertical, Undo2 } from 'lucide-react';
 
 interface MonthlyRentEntry {
   id: string;
@@ -39,6 +47,7 @@ interface MonthlyRentEntry {
 export default function History() {
   const { tenants, isLoading: tenantsLoading } = useTenants();
   const [selectedTenantId, setSelectedTenantId] = useState<string>('all');
+  const [reversePaymentOpen, setReversePaymentOpen] = useState(false);
   
   const activeTenants = tenants.filter(t => t.is_active);
 
@@ -55,9 +64,13 @@ export default function History() {
     },
   });
 
-  const { payments } = usePayments();
+  const { allPayments, reversePayment } = usePayments();
   const { readings } = useElectricity();
   const { logs: allLogs } = useActivityLog();
+
+  const handleReversePayment = (paymentId: string, reason: string) => {
+    reversePayment.mutate({ paymentId, reversalReason: reason });
+  };
 
   if (tenantsLoading) {
     return (
@@ -93,7 +106,8 @@ export default function History() {
   // Build history data per tenant
   const getHistoryData = (tenantId: string) => {
     const tenantRentEntries = allRentEntries.filter(e => e.tenant_id === tenantId);
-    const tenantPayments = payments.filter(p => p.tenant_id === tenantId);
+    const nonReversedPayments = allPayments.filter(p => !p.is_reversed);
+    const tenantPayments = nonReversedPayments.filter(p => p.tenant_id === tenantId);
     const tenantReadings = readings.filter(r => r.tenant_id === tenantId);
     const tenant = tenants.find(t => t.id === tenantId);
 
@@ -150,19 +164,34 @@ export default function History() {
               Complete financial records and activity history
             </p>
           </div>
-          <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue placeholder="Select tenant" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Tenants</SelectItem>
-              {activeTenants.map((tenant) => (
-                <SelectItem key={tenant.id} value={tenant.id}>
-                  {tenant.name} (Room {tenant.room_number})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select value={selectedTenantId} onValueChange={setSelectedTenantId}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectValue placeholder="Select tenant" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Tenants</SelectItem>
+                {activeTenants.map((tenant) => (
+                  <SelectItem key={tenant.id} value={tenant.id}>
+                    {tenant.name} (Room {tenant.room_number})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setReversePaymentOpen(true)}>
+                  <Undo2 className="h-4 w-4 mr-2" />
+                  Reverse Payment
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         <Tabs defaultValue="history">
@@ -284,6 +313,15 @@ export default function History() {
             )}
           </TabsContent>
         </Tabs>
+
+        <ReversePaymentDialog
+          open={reversePaymentOpen}
+          onOpenChange={setReversePaymentOpen}
+          payments={allPayments}
+          tenants={tenants}
+          onConfirm={handleReversePayment}
+          isLoading={reversePayment.isPending}
+        />
       </div>
     </Layout>
   );
