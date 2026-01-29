@@ -14,7 +14,8 @@ export type EventType =
   | 'MEMBER_ADDED'
   | 'MEMBER_DISCONTINUED'
   | 'MEMBER_UPDATED'
-  | 'CONCESSION_APPLIED';
+  | 'CONCESSION_APPLIED'
+  | 'PAYMENT_REVERSED';
 
 export interface ActivityLog {
   id: string;

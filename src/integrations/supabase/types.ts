@@ -139,36 +139,45 @@ export type Database = {
           amount: number
           created_at: string | null
           id: string
+          is_reversed: boolean
           notes: string | null
           paid_by: string | null
           payment_date: string | null
           payment_mode: string
           payment_reason: string
           reason_notes: string | null
+          reversal_reason: string | null
+          reversed_at: string | null
           tenant_id: string
         }
         Insert: {
           amount: number
           created_at?: string | null
           id?: string
+          is_reversed?: boolean
           notes?: string | null
           paid_by?: string | null
           payment_date?: string | null
           payment_mode: string
           payment_reason?: string
           reason_notes?: string | null
+          reversal_reason?: string | null
+          reversed_at?: string | null
           tenant_id: string
         }
         Update: {
           amount?: number
           created_at?: string | null
           id?: string
+          is_reversed?: boolean
           notes?: string | null
           paid_by?: string | null
           payment_date?: string | null
           payment_mode?: string
           payment_reason?: string
           reason_notes?: string | null
+          reversal_reason?: string | null
+          reversed_at?: string | null
           tenant_id?: string
         }
         Relationships: [
