@@ -55,10 +55,13 @@ export type Database = {
           created_at: string | null
           current_reading: number
           id: string
+          is_reversed: boolean
           month: number
           previous_reading: number
           rate_per_unit: number
           reading_date: string | null
+          reversal_reason: string | null
+          reversed_at: string | null
           tenant_id: string
           units_consumed: number
           year: number
@@ -68,10 +71,13 @@ export type Database = {
           created_at?: string | null
           current_reading: number
           id?: string
+          is_reversed?: boolean
           month: number
           previous_reading: number
           rate_per_unit: number
           reading_date?: string | null
+          reversal_reason?: string | null
+          reversed_at?: string | null
           tenant_id: string
           units_consumed: number
           year: number
@@ -81,10 +87,13 @@ export type Database = {
           created_at?: string | null
           current_reading?: number
           id?: string
+          is_reversed?: boolean
           month?: number
           previous_reading?: number
           rate_per_unit?: number
           reading_date?: string | null
+          reversal_reason?: string | null
+          reversed_at?: string | null
           tenant_id?: string
           units_consumed?: number
           year?: number
@@ -103,24 +112,33 @@ export type Database = {
         Row: {
           created_at: string | null
           id: string
+          is_reversed: boolean
           month: number
           rent_amount: number
+          reversal_reason: string | null
+          reversed_at: string | null
           tenant_id: string
           year: number
         }
         Insert: {
           created_at?: string | null
           id?: string
+          is_reversed?: boolean
           month: number
           rent_amount: number
+          reversal_reason?: string | null
+          reversed_at?: string | null
           tenant_id: string
           year: number
         }
         Update: {
           created_at?: string | null
           id?: string
+          is_reversed?: boolean
           month?: number
           rent_amount?: number
+          reversal_reason?: string | null
+          reversed_at?: string | null
           tenant_id?: string
           year?: number
         }
