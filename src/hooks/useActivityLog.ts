@@ -15,7 +15,11 @@ export type EventType =
   | 'MEMBER_DISCONTINUED'
   | 'MEMBER_UPDATED'
   | 'CONCESSION_APPLIED'
-  | 'PAYMENT_REVERSED';
+  | 'PAYMENT_REVERSED'
+  | 'RENT_REVERSED'
+  | 'ELECTRICITY_REVERSED'
+  | 'CONCESSION_REVERSED'
+  | 'TRANSACTION_UNDONE';
 
 export interface ActivityLog {
   id: string;

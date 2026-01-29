@@ -4,8 +4,9 @@ import { useTenants } from '@/hooks/useTenants';
 import { usePayments } from '@/hooks/usePayments';
 import { useElectricity } from '@/hooks/useElectricity';
 import { useActivityLog } from '@/hooks/useActivityLog';
+import { useUndoTransaction } from '@/hooks/useUndoTransaction';
 import { ActivityTimeline } from '@/components/ActivityTimeline';
-import { ReversePaymentDialog } from '@/components/ReversePaymentDialog';
+import { UndoTransactionDialog } from '@/components/UndoTransactionDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -47,7 +48,7 @@ interface MonthlyRentEntry {
 export default function History() {
   const { tenants, isLoading: tenantsLoading } = useTenants();
   const [selectedTenantId, setSelectedTenantId] = useState<string>('all');
-  const [reversePaymentOpen, setReversePaymentOpen] = useState(false);
+  const [undoDialogOpen, setUndoDialogOpen] = useState(false);
   
   const activeTenants = tenants.filter(t => t.is_active);
 
@@ -64,12 +65,13 @@ export default function History() {
     },
   });
 
-  const { allPayments, reversePayment } = usePayments();
+  const { allPayments } = usePayments();
   const { readings } = useElectricity();
   const { logs: allLogs } = useActivityLog();
+  const { transactions, undoTransaction } = useUndoTransaction();
 
-  const handleReversePayment = (paymentId: string, reason: string) => {
-    reversePayment.mutate({ paymentId, reversalReason: reason });
+  const handleUndoTransaction = (transaction: Parameters<typeof undoTransaction.mutate>[0]['transaction'], reason: string) => {
+    undoTransaction.mutate({ transaction, reason });
   };
 
   if (tenantsLoading) {
@@ -185,9 +187,9 @@ export default function History() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setReversePaymentOpen(true)}>
+                <DropdownMenuItem onClick={() => setUndoDialogOpen(true)}>
                   <Undo2 className="h-4 w-4 mr-2" />
-                  Reverse Payment
+                  Undo Transaction
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -314,13 +316,12 @@ export default function History() {
           </TabsContent>
         </Tabs>
 
-        <ReversePaymentDialog
-          open={reversePaymentOpen}
-          onOpenChange={setReversePaymentOpen}
-          payments={allPayments}
-          tenants={tenants}
-          onConfirm={handleReversePayment}
-          isLoading={reversePayment.isPending}
+        <UndoTransactionDialog
+          open={undoDialogOpen}
+          onOpenChange={setUndoDialogOpen}
+          transactions={transactions}
+          onConfirm={handleUndoTransaction}
+          isLoading={undoTransaction.isPending}
         />
       </div>
     </Layout>
