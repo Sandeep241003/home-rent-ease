@@ -34,12 +34,22 @@ export function useActivityLog(tenantId?: string) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  // Reversal event types that should be hidden from history
+  const reversalEventTypes = [
+    'PAYMENT_REVERSED',
+    'RENT_REVERSED', 
+    'ELECTRICITY_REVERSED',
+    'CONCESSION_REVERSED',
+    'TRANSACTION_UNDONE',
+  ];
+
   const logsQuery = useQuery({
     queryKey: ['activity-logs', tenantId],
     queryFn: async () => {
       let query = supabase
         .from('activity_log')
         .select('*')
+        .not('event_type', 'in', `(${reversalEventTypes.join(',')})`)
         .order('created_at', { ascending: false });
 
       if (tenantId) {
@@ -48,7 +58,56 @@ export function useActivityLog(tenantId?: string) {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as ActivityLog[];
+      
+      // Further filter: exclude logs that correspond to reversed transactions
+      // We need to check payments, rent entries, and electricity readings
+      const [paymentsRes, rentRes, electricityRes] = await Promise.all([
+        supabase.from('payments').select('id, created_at').eq('is_reversed', true),
+        supabase.from('monthly_rent_entries').select('id, created_at').eq('is_reversed', true),
+        supabase.from('electricity_readings').select('id, created_at').eq('is_reversed', true),
+      ]);
+
+      const reversedPaymentDates = new Set(paymentsRes.data?.map(p => p.created_at) ?? []);
+      const reversedRentDates = new Set(rentRes.data?.map(r => r.created_at) ?? []);
+      const reversedElectricityDates = new Set(electricityRes.data?.map(e => e.created_at) ?? []);
+
+      // Filter out original transaction logs that have been reversed
+      const filteredLogs = (data as ActivityLog[]).filter(log => {
+        // Skip PAYMENT_RECEIVED logs if the payment is reversed
+        if (log.event_type === 'PAYMENT_RECEIVED') {
+          // Check if any reversed payment matches this log's approximate time
+          const logTime = new Date(log.created_at).getTime();
+          for (const date of reversedPaymentDates) {
+            if (date && Math.abs(new Date(date).getTime() - logTime) < 60000) {
+              return false;
+            }
+          }
+        }
+        
+        // Skip RENT_ADDED logs if the rent entry is reversed
+        if (log.event_type === 'RENT_ADDED') {
+          const logTime = new Date(log.created_at).getTime();
+          for (const date of reversedRentDates) {
+            if (date && Math.abs(new Date(date).getTime() - logTime) < 60000) {
+              return false;
+            }
+          }
+        }
+        
+        // Skip ELECTRICITY_ADDED logs if the reading is reversed
+        if (log.event_type === 'ELECTRICITY_ADDED') {
+          const logTime = new Date(log.created_at).getTime();
+          for (const date of reversedElectricityDates) {
+            if (date && Math.abs(new Date(date).getTime() - logTime) < 60000) {
+              return false;
+            }
+          }
+        }
+        
+        return true;
+      });
+
+      return filteredLogs;
     },
     enabled: !!user,
   });
