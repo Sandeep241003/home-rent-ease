@@ -1,14 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { 
   LayoutDashboard, 
   Users, 
   FileText, 
-  LogOut,
   Menu,
   X,
-  Building2
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -24,7 +21,6 @@ const navItems = [
 ];
 
 export function Layout({ children }: LayoutProps) {
-  const { signOut } = useAuth();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -65,14 +61,6 @@ export function Layout({ children }: LayoutProps) {
                 {item.label}
               </Link>
             ))}
-            <Button
-              variant="ghost"
-              className="mt-4 justify-start gap-3 px-4 text-destructive hover:text-destructive"
-              onClick={signOut}
-            >
-              <LogOut className="h-5 w-5" />
-              Sign Out
-            </Button>
           </nav>
         </div>
       )}
@@ -101,16 +89,6 @@ export function Layout({ children }: LayoutProps) {
               </Link>
             ))}
           </nav>
-          <div className="absolute bottom-0 left-0 right-0 border-t p-4">
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive"
-              onClick={signOut}
-            >
-              <LogOut className="h-5 w-5" />
-              Sign Out
-            </Button>
-          </div>
         </aside>
 
         {/* Main Content */}

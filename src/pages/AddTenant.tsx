@@ -17,8 +17,8 @@ import {
 } from '@/components/ui/select';
 import { ArrowLeft, ArrowRight, Upload, User, Check, Users, Home, CalendarIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { LANDLORD_ID } from '@/lib/constants';
 import { Progress } from '@/components/ui/progress';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -60,7 +60,6 @@ type Step = 'count' | 'member1' | 'member2' | 'room';
 export default function AddTenant() {
   const navigate = useNavigate();
   const { addTenant } = useTenants();
-  const { user } = useAuth();
   const { toast } = useToast();
   
   const [step, setStep] = useState<Step>('count');
@@ -74,9 +73,7 @@ export default function AddTenant() {
   const pdfFileRef2 = useRef<HTMLInputElement>(null);
 
   const uploadAadhaarPdf = async (file: File): Promise<string | undefined> => {
-    if (!user) return undefined;
-    
-    const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.pdf`;
+    const fileName = `${LANDLORD_ID}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.pdf`;
     
     const { error: uploadError } = await supabase.storage
       .from('aadhaar-images')
