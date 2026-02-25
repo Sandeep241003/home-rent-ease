@@ -33,9 +33,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+    }).catch((error) => {
+      console.error('Failed to get session:', error);
+      // Clear any stale session data so user can log in fresh
+      setSession(null);
+      setUser(null);
+      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    // Safety timeout: if auth takes too long (e.g. network issues), stop loading
+    const timeout = setTimeout(() => {
+      setLoading((current) => {
+        if (current) {
+          console.warn('Auth loading timed out, clearing session');
+          supabase.auth.signOut().catch(() => {});
+          setSession(null);
+          setUser(null);
+        }
+        return false;
+      });
+    }, 5000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
