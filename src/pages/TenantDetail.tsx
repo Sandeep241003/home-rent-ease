@@ -62,7 +62,7 @@ import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { LANDLORD_ID } from '@/lib/constants';
+import { useAuth } from '@/contexts/AuthContext';
 import jsPDF from 'jspdf';
 
 export default function TenantDetail() {
@@ -73,6 +73,7 @@ export default function TenantDetail() {
   const { readings, addReading } = useElectricity(id);
   const { logs } = useActivityLog(id);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const [showDiscontinuedMembers, setShowDiscontinuedMembers] = useState(false);
 
@@ -166,7 +167,7 @@ export default function TenantDetail() {
   const displayedMembers = showDiscontinuedMembers ? allMembers : activeMembers;
 
   const uploadAadhaarPdf = async (file: File): Promise<string | undefined> => {
-    const fileName = `${LANDLORD_ID}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.pdf`;
+    const fileName = `${user!.id}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.pdf`;
     
     const { error: uploadError } = await supabase.storage
       .from('aadhaar-images')

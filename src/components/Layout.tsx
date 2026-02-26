@@ -6,9 +6,11 @@ import {
   FileText, 
   Menu,
   X,
+  LogOut,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -23,6 +25,7 @@ const navItems = [
 export function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { signOut, user } = useAuth();
 
   return (
     <div className="min-h-screen bg-background">
@@ -32,13 +35,23 @@ export function Layout({ children }: LayoutProps) {
           <img src="/favicon.png" alt="RentEase" className="h-6 w-6" />
           <span className="font-bold">RentEase</span>
         </Link>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        >
-          {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={signOut}
+            title="Sign Out"
+          >
+            <LogOut className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </Button>
+        </div>
       </header>
 
       {/* Mobile Menu */}
@@ -67,12 +80,12 @@ export function Layout({ children }: LayoutProps) {
 
       <div className="flex">
         {/* Desktop Sidebar */}
-        <aside className="fixed left-0 top-0 z-30 hidden h-screen w-64 border-r bg-card md:block">
+        <aside className="fixed left-0 top-0 z-30 hidden h-screen w-64 border-r bg-card md:flex md:flex-col">
           <div className="flex h-16 items-center gap-2 border-b px-6">
             <img src="/favicon.png" alt="RentEase" className="h-6 w-6" />
             <span className="font-bold text-lg">RentEase</span>
           </div>
-          <nav className="flex flex-col gap-1 p-4">
+          <nav className="flex flex-col gap-1 p-4 flex-1">
             {navItems.map((item) => (
               <Link
                 key={item.href}
@@ -89,6 +102,19 @@ export function Layout({ children }: LayoutProps) {
               </Link>
             ))}
           </nav>
+          <div className="border-t p-4">
+            <div className="text-xs text-muted-foreground truncate mb-2 px-2">
+              {user?.email}
+            </div>
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-2"
+              onClick={signOut}
+            >
+              <LogOut className="h-4 w-4" />
+              Sign Out
+            </Button>
+          </div>
         </aside>
 
         {/* Main Content */}
