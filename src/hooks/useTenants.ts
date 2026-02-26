@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { LANDLORD_ID } from '@/lib/constants';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface Member {
   name: string;
@@ -56,6 +56,7 @@ export interface TenantFormData {
 export function useTenants() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const tenantsQuery = useQuery({
     queryKey: ['tenants'],
@@ -93,7 +94,7 @@ export function useTenants() {
       const { data: newTenant, error } = await supabase
         .from('tenants')
         .insert({
-          landlord_id: LANDLORD_ID,
+          landlord_id: user!.id,
           name: data.name,
           phone: data.phone,
           room_number: data.room_number,
