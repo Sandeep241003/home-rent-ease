@@ -17,8 +17,8 @@ import {
 
 export default function Dashboard() {
   useMonthlyRentSync();
-  const { tenants, isLoading } = useTenants();
-  const { payments } = usePayments();
+  const { tenants, isLoading, error: tenantsError } = useTenants();
+  const { payments, isLoading: paymentsLoading } = usePayments();
 
   const activeTenants = tenants.filter(t => t.is_active);
   const totalPending = activeTenants.reduce((sum, t) => sum + (t.pending_amount || 0), 0);
@@ -45,6 +45,30 @@ export default function Dashboard() {
               <div key={i} className="h-32 bg-muted rounded-lg"></div>
             ))}
           </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (tenantsError) {
+    const isNetworkError = tenantsError.message?.includes('Failed to fetch') || 
+                           tenantsError.message?.includes('NetworkError') ||
+                           tenantsError.message?.includes('timeout');
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center py-12 space-y-4">
+          <AlertCircle className="h-12 w-12 text-destructive" />
+          <h2 className="text-xl font-semibold">
+            {isNetworkError ? 'Connection Error' : 'Error Loading Data'}
+          </h2>
+          <p className="text-muted-foreground text-center max-w-md">
+            {isNetworkError 
+              ? 'Unable to connect to the server. Please check your internet connection and try again.'
+              : tenantsError.message}
+          </p>
+          <Button onClick={() => window.location.reload()}>
+            Retry
+          </Button>
         </div>
       </Layout>
     );
