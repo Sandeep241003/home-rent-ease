@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { useTenants } from '@/hooks/useTenants';
 import { useMonthlyRentSync } from '@/hooks/useMonthlyRent';
+import { usePayments } from '@/hooks/usePayments';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
@@ -17,13 +18,22 @@ import {
 export default function Dashboard() {
   useMonthlyRentSync();
   const { tenants, isLoading } = useTenants();
+  const { payments } = usePayments();
 
   const activeTenants = tenants.filter(t => t.is_active);
   const totalPending = activeTenants.reduce((sum, t) => sum + (t.pending_amount || 0), 0);
   const defaulters = activeTenants.filter(t => (t.pending_amount || 0) > 0);
   
-  // Total collected
-  const totalCollected = activeTenants.reduce((sum, t) => sum + (t.total_paid || 0), 0);
+  // Total collected - current month only
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  const totalCollected = payments
+    .filter(p => {
+      const d = new Date(p.payment_date);
+      return d >= monthStart && d <= monthEnd;
+    })
+    .reduce((sum, p) => sum + p.amount, 0);
 
   if (isLoading) {
     return (
@@ -64,7 +74,7 @@ export default function Dashboard() {
                 ₹{totalCollected.toLocaleString('en-IN')}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                All time collection
+                This month's collection
               </p>
             </CardContent>
           </Card>
