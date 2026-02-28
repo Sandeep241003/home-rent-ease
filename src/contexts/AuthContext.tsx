@@ -16,6 +16,66 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
 });
 
+const BACKEND_URL = import.meta.env.VITE_SUPABASE_URL;
+const PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+
+const isNetworkAuthError = (error: unknown): boolean => {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    const name = error.name.toLowerCase();
+    return (
+      message.includes('failed to fetch') ||
+      message.includes('timeout') ||
+      name.includes('abort') ||
+      name.includes('network')
+    );
+  }
+
+  if (typeof error === 'object' && error !== null && 'status' in error) {
+    return Number((error as { status?: number }).status) === 0;
+  }
+
+  return false;
+};
+
+const clearLocalAuthSession = (reason: string) => {
+  try {
+    if (PROJECT_ID) {
+      const baseAuthKey = `sb-${PROJECT_ID}-auth-token`;
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith(baseAuthKey)) {
+          localStorage.removeItem(key);
+        }
+      });
+      localStorage.removeItem(`sb-${PROJECT_ID}-auth-token-code-verifier`);
+    }
+
+    localStorage.removeItem('supabase.auth.token');
+    console.warn('[Auth] Cleared local auth session', { reason });
+  } catch (storageError) {
+    console.error('[Auth] Failed to clear local session storage', storageError);
+  }
+};
+
+const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error('Backend connection timeout'));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+};
+
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -25,34 +85,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (!mounted) return;
-        // If token refresh failed, clear the dead session
-        if (event === 'TOKEN_REFRESHED' && !session) {
-          setSession(null);
-          setLoading(false);
-          return;
-        }
-        setSession(session);
-        setLoading(false);
-      }
-    );
+    if (!BACKEND_URL || !PUBLISHABLE_KEY) {
+      console.error('[Auth] Backend client misconfigured', {
+        hasBackendUrl: Boolean(BACKEND_URL),
+        hasPublishableKey: Boolean(PUBLISHABLE_KEY),
+      });
+      setSession(null);
+      setLoading(false);
+      return;
+    }
 
-    // Then check for existing session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
+    console.info('[Auth] Backend auth bootstrap', {
+      backendUrl: BACKEND_URL,
+      projectId: PROJECT_ID,
+    });
+
+    // Set up auth state listener FIRST
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
-      if (error) {
-        // Session is stale/invalid — clear it so user can log in fresh
-        console.warn('Session check failed, clearing stale session:', error.message);
-        supabase.auth.signOut().catch(() => {});
+
+      console.info('[Auth] onAuthStateChange', {
+        event,
+        hasSession: Boolean(session),
+      });
+
+      if (event === 'TOKEN_REFRESHED' && !session) {
+        clearLocalAuthSession('token refresh returned empty session');
         setSession(null);
-      } else {
-        setSession(session);
+        setLoading(false);
+        return;
       }
+
+      setSession(session);
       setLoading(false);
     });
+
+    // Then check for existing session
+    withTimeout(supabase.auth.getSession(), 10000)
+      .then(({ data: { session }, error }) => {
+        if (!mounted) return;
+
+        if (error) {
+          console.error('[Auth] getSession failed', {
+            backendUrl: BACKEND_URL,
+            message: error.message,
+          });
+
+          if (isNetworkAuthError(error)) {
+            clearLocalAuthSession('network error during getSession');
+          }
+
+          setSession(null);
+        } else {
+          setSession(session);
+        }
+
+        setLoading(false);
+      })
+      .catch(async (error) => {
+        if (!mounted) return;
+
+        console.error('[Auth] session bootstrap failed', {
+          backendUrl: BACKEND_URL,
+          message: error instanceof Error ? error.message : String(error),
+        });
+
+        clearLocalAuthSession('session bootstrap timeout/failure');
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+        setSession(null);
+        setLoading(false);
+      });
 
     return () => {
       mounted = false;
@@ -61,7 +165,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.warn('[Auth] Remote sign out failed, applying local sign out fallback', error);
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+    } finally {
+      clearLocalAuthSession('manual sign out');
+      setSession(null);
+    }
   };
 
   return (
@@ -70,3 +182,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     </AuthContext.Provider>
   );
 }
+

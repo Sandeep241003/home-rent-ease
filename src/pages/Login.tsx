@@ -10,6 +10,25 @@ import { useToast } from '@/hooks/use-toast';
 import { LogIn, UserPlus, KeyRound } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 
+const isNetworkAuthError = (error: unknown): boolean => {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    const name = error.name.toLowerCase();
+    return (
+      message.includes('failed to fetch') ||
+      message.includes('timeout') ||
+      name.includes('abort') ||
+      name.includes('network')
+    );
+  }
+
+  if (typeof error === 'object' && error !== null && 'status' in error) {
+    return Number((error as { status?: number }).status) === 0;
+  }
+
+  return false;
+};
+
 export default function Login() {
   const { session, loading } = useAuth();
   const navigate = useNavigate();
@@ -20,6 +39,12 @@ export default function Login() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
+
+  const backendUrl = import.meta.env.VITE_SUPABASE_URL;
+  const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const authTokenEndpoint = backendUrl
+    ? `${backendUrl}/auth/v1/token?grant_type=password`
+    : 'undefined';
 
   if (loading) {
     return (
@@ -39,16 +64,52 @@ export default function Login() {
       toast({ title: 'Please enter your email', variant: 'destructive' });
       return;
     }
+
+    if (!backendUrl || !publishableKey) {
+      console.error('[Auth] Missing backend configuration for password reset', {
+        hasBackendUrl: Boolean(backendUrl),
+        hasPublishableKey: Boolean(publishableKey),
+      });
+      toast({
+        title: 'Backend configuration missing',
+        description: 'Authentication service is not configured correctly.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
+      console.info('[Auth] resetPasswordForEmail request', {
+        backendUrl,
+        endpoint: `${backendUrl}/auth/v1/recover`,
+        email,
+      });
+
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
       if (error) throw error;
       toast({ title: 'Password reset email sent', description: 'Check your inbox for the reset link.' });
       setIsForgotPassword(false);
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      const networkError = isNetworkAuthError(error);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+
+      console.error('[Auth] resetPasswordForEmail failed', {
+        backendUrl,
+        endpoint: `${backendUrl}/auth/v1/recover`,
+        message,
+        error,
+      });
+
+      toast({
+        title: networkError ? 'Backend connection timeout' : 'Error',
+        description: networkError
+          ? 'Cannot reach authentication service. Check your network and try again.'
+          : message,
+        variant: 'destructive',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -56,10 +117,30 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!backendUrl || !publishableKey) {
+      console.error('[Auth] Missing backend configuration for login/signup', {
+        hasBackendUrl: Boolean(backendUrl),
+        hasPublishableKey: Boolean(publishableKey),
+      });
+      toast({
+        title: 'Backend configuration missing',
+        description: 'Authentication service is not configured correctly.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       if (isSignUp) {
+        console.info('[Auth] signUp request', {
+          backendUrl,
+          endpoint: `${backendUrl}/auth/v1/signup`,
+          email,
+        });
+
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -71,12 +152,34 @@ export default function Login() {
           description: 'Please check your email to verify your account before signing in.',
         });
       } else {
+        console.info('[Auth] signInWithPassword request', {
+          backendUrl,
+          endpoint: authTokenEndpoint,
+          email,
+        });
+
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         navigate('/dashboard');
       }
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } catch (error: unknown) {
+      const networkError = isNetworkAuthError(error);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+
+      console.error('[Auth] authentication request failed', {
+        backendUrl,
+        endpoint: isSignUp ? `${backendUrl}/auth/v1/signup` : authTokenEndpoint,
+        message,
+        error,
+      });
+
+      toast({
+        title: networkError ? 'Backend connection timeout' : 'Error',
+        description: networkError
+          ? 'Cannot reach authentication service. Check your network/VPN/ad blocker and try again.'
+          : message,
+        variant: 'destructive',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -210,3 +313,4 @@ export default function Login() {
     </div>
   );
 }
+
