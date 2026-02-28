@@ -23,21 +23,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (event, session) => {
+        if (!mounted) return;
+        // If token refresh failed, clear the dead session
+        if (event === 'TOKEN_REFRESHED' && !session) {
+          setSession(null);
+          setLoading(false);
+          return;
+        }
         setSession(session);
         setLoading(false);
       }
     );
 
     // Then check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (!mounted) return;
+      if (error) {
+        // Session is stale/invalid — clear it so user can log in fresh
+        console.warn('Session check failed, clearing stale session:', error.message);
+        supabase.auth.signOut().catch(() => {});
+        setSession(null);
+      } else {
+        setSession(session);
+      }
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {
