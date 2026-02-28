@@ -40,18 +40,19 @@ const isNetworkAuthError = (error: unknown): boolean => {
 };
 
 const clearLocalAuthSession = (reason: string) => {
-  try {
-    if (PROJECT_ID) {
-      const baseAuthKey = `sb-${PROJECT_ID}-auth-token`;
-      Object.keys(localStorage).forEach((key) => {
-        if (key.startsWith(baseAuthKey)) {
-          localStorage.removeItem(key);
-        }
-      });
-      localStorage.removeItem(`sb-${PROJECT_ID}-auth-token-code-verifier`);
-    }
+  const clearAuthKeysFromStorage = (storage: Storage) => {
+    const authKeyRegex = /^sb-[a-z0-9]{20}-auth-token(?:-code-verifier)?$/i;
 
-    localStorage.removeItem('supabase.auth.token');
+    Object.keys(storage).forEach((key) => {
+      if (authKeyRegex.test(key) || key === 'supabase.auth.token') {
+        storage.removeItem(key);
+      }
+    });
+  };
+
+  try {
+    clearAuthKeysFromStorage(localStorage);
+    clearAuthKeysFromStorage(sessionStorage);
     console.warn('[Auth] Cleared local auth session', { reason });
   } catch (storageError) {
     console.error('[Auth] Failed to clear local session storage', storageError);
