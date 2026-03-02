@@ -29,6 +29,13 @@ const isNetworkAuthError = (error: unknown): boolean => {
   return false;
 };
 
+type PasswordSignInBridgeResponse = {
+  access_token?: string;
+  refresh_token?: string;
+  message?: string;
+  code?: string;
+};
+
 export default function Login() {
   const { session, loading } = useAuth();
   const navigate = useNavigate();
@@ -44,6 +51,9 @@ export default function Login() {
   const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   const authTokenEndpoint = backendUrl
     ? `${backendUrl}/auth/v1/token?grant_type=password`
+    : 'undefined';
+  const authPasswordBridgeEndpoint = backendUrl
+    ? `${backendUrl}/functions/v1/auth-password-signin`
     : 'undefined';
 
   if (loading) {
@@ -155,10 +165,31 @@ export default function Login() {
         console.info('[Auth] signInWithPassword request', {
           backendUrl,
           endpoint: authTokenEndpoint,
+          bridgeEndpoint: authPasswordBridgeEndpoint,
           email,
         });
 
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const bridgeResponse = await fetch(authPasswordBridgeEndpoint, {
+          method: 'POST',
+          headers: {
+            apikey: publishableKey,
+            authorization: `Bearer ${publishableKey}`,
+            'content-type': 'application/json;charset=UTF-8',
+          },
+          body: JSON.stringify({ email, password }),
+        });
+
+        const bridgePayload = (await bridgeResponse.json().catch(() => null)) as PasswordSignInBridgeResponse | null;
+
+        if (!bridgeResponse.ok || !bridgePayload?.access_token || !bridgePayload?.refresh_token) {
+          throw new Error(bridgePayload?.message ?? 'Invalid login credentials');
+        }
+
+        const { error } = await supabase.auth.setSession({
+          access_token: bridgePayload.access_token,
+          refresh_token: bridgePayload.refresh_token,
+        });
+
         if (error) throw error;
         navigate('/dashboard');
       }
@@ -168,7 +199,7 @@ export default function Login() {
 
       console.error('[Auth] authentication request failed', {
         backendUrl,
-        endpoint: isSignUp ? `${backendUrl}/auth/v1/signup` : authTokenEndpoint,
+        endpoint: isSignUp ? `${backendUrl}/auth/v1/signup` : authPasswordBridgeEndpoint,
         message,
         error,
       });
