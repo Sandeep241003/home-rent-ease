@@ -49,12 +49,6 @@ export default function Login() {
 
   const backendUrl = import.meta.env.VITE_SUPABASE_URL;
   const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-  const authTokenEndpoint = backendUrl
-    ? `${backendUrl}/auth/v1/token?grant_type=password`
-    : 'undefined';
-  const authPasswordBridgeEndpoint = backendUrl
-    ? `${backendUrl}/functions/v1/auth-password-signin`
-    : 'undefined';
 
   if (loading) {
     return (
@@ -162,26 +156,20 @@ export default function Login() {
           description: 'Please check your email to verify your account before signing in.',
         });
       } else {
-        console.info('[Auth] signInWithPassword request', {
+        console.info('[Auth] signInWithPassword via bridge', {
           backendUrl,
-          endpoint: authTokenEndpoint,
-          bridgeEndpoint: authPasswordBridgeEndpoint,
           email,
         });
 
-        const bridgeResponse = await fetch(authPasswordBridgeEndpoint, {
-          method: 'POST',
-          headers: {
-            apikey: publishableKey,
-            authorization: `Bearer ${publishableKey}`,
-            'content-type': 'application/json;charset=UTF-8',
-          },
-          body: JSON.stringify({ email, password }),
+        const { data: bridgePayload, error: invokeError } = await supabase.functions.invoke('auth-password-signin', {
+          body: { email, password },
         });
 
-        const bridgePayload = (await bridgeResponse.json().catch(() => null)) as PasswordSignInBridgeResponse | null;
+        if (invokeError) {
+          throw new Error(invokeError.message ?? 'Authentication bridge failed');
+        }
 
-        if (!bridgeResponse.ok || !bridgePayload?.access_token || !bridgePayload?.refresh_token) {
+        if (!bridgePayload?.access_token || !bridgePayload?.refresh_token) {
           throw new Error(bridgePayload?.message ?? 'Invalid login credentials');
         }
 
@@ -199,7 +187,7 @@ export default function Login() {
 
       console.error('[Auth] authentication request failed', {
         backendUrl,
-        endpoint: isSignUp ? `${backendUrl}/auth/v1/signup` : authPasswordBridgeEndpoint,
+        endpoint: isSignUp ? `${backendUrl}/auth/v1/signup` : 'auth-password-signin',
         message,
         error,
       });
