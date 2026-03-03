@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.auth-password-signin]
 verify_jwt = false
+
+[functions.auth-password-signup]
+verify_jwt = false
+
+[functions.auth-password-reset]
+verify_jwt = false
