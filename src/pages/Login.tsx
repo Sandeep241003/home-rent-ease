@@ -84,16 +84,20 @@ export default function Login() {
 
     setIsSubmitting(true);
     try {
-      console.info('[Auth] resetPasswordForEmail request', {
-        backendUrl,
-        endpoint: `${backendUrl}/auth/v1/recover`,
-        email,
+      console.info('[Auth] resetPasswordForEmail via bridge', { email });
+
+      const { data: resetPayload, error: invokeError } = await supabase.functions.invoke('auth-password-reset', {
+        body: { email, redirectTo: `${window.location.origin}/reset-password` },
       });
 
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      if (error) throw error;
+      if (invokeError) {
+        throw new Error(invokeError.message ?? 'Password reset request failed');
+      }
+
+      if (!resetPayload?.success) {
+        throw new Error(resetPayload?.message ?? 'Password reset request failed');
+      }
+
       toast({ title: 'Password reset email sent', description: 'Check your inbox for the reset link.' });
       setIsForgotPassword(false);
     } catch (error: unknown) {
@@ -139,18 +143,28 @@ export default function Login() {
 
     try {
       if (isSignUp) {
-        console.info('[Auth] signUp request', {
-          backendUrl,
-          endpoint: `${backendUrl}/auth/v1/signup`,
-          email,
+        console.info('[Auth] signUp via bridge', { email });
+
+        const { data: signupPayload, error: invokeError } = await supabase.functions.invoke('auth-password-signup', {
+          body: { email, password, emailRedirectTo: window.location.origin },
         });
 
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: window.location.origin },
-        });
-        if (error) throw error;
+        if (invokeError) {
+          throw new Error(invokeError.message ?? 'Signup failed');
+        }
+
+        if (signupPayload?.access_token && signupPayload?.refresh_token) {
+          // Auto-confirm enabled: set session directly
+          const { error } = await supabase.auth.setSession({
+            access_token: signupPayload.access_token,
+            refresh_token: signupPayload.refresh_token,
+          });
+          if (error) throw error;
+          navigate('/dashboard');
+          return;
+        }
+
+        // Email confirmation required
         toast({
           title: 'Account created!',
           description: 'Please check your email to verify your account before signing in.',
