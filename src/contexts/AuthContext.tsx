@@ -129,16 +129,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!mounted) return;
 
         if (error) {
-          console.error('[Auth] getSession failed', {
+          const isNetwork = isNetworkAuthError(error);
+          console.warn('[Auth] getSession failed', {
             backendUrl: BACKEND_URL,
             message: error.message,
+            isNetwork,
           });
 
-          if (isNetworkAuthError(error)) {
-            clearLocalAuthSession('network error during getSession');
+          if (!isNetwork) {
+            // Only clear session on non-network errors (e.g. invalid token)
+            clearLocalAuthSession('non-network getSession error');
+            setSession(null);
           }
-
-          setSession(null);
+          // On network errors, trust the session already set by onAuthStateChange from localStorage
         } else {
           setSession(session);
         }
