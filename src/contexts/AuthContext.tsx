@@ -148,14 +148,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(async (error) => {
         if (!mounted) return;
 
-        console.error('[Auth] session bootstrap failed', {
+        const isNetwork = isNetworkAuthError(error) ||
+          (error instanceof Error && error.message.includes('timeout'));
+
+        console.warn('[Auth] session bootstrap failed', {
           backendUrl: BACKEND_URL,
           message: error instanceof Error ? error.message : String(error),
+          isNetwork,
         });
 
-        clearLocalAuthSession('session bootstrap timeout/failure');
-        await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
-        setSession(null);
+        if (isNetwork) {
+          // Network/ISP block: trust the locally cached session instead of wiping it
+          console.info('[Auth] Network error – preserving cached session');
+          // Session was already set by onAuthStateChange from localStorage, keep it
+        } else {
+          clearLocalAuthSession('session bootstrap non-network failure');
+          await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+          setSession(null);
+        }
+
         setLoading(false);
       });
 
