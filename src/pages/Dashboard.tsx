@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { useTenants } from '@/hooks/useTenants';
@@ -5,6 +6,7 @@ import { useMonthlyRentSync } from '@/hooks/useMonthlyRent';
 import { usePayments } from '@/hooks/usePayments';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { MonthlyCollectionDialog } from '@/components/MonthlyCollectionDialog';
 import { 
   IndianRupee, 
   AlertCircle, 
