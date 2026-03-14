@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { useTenants } from '@/hooks/useTenants';
@@ -5,6 +6,7 @@ import { useMonthlyRentSync } from '@/hooks/useMonthlyRent';
 import { usePayments } from '@/hooks/usePayments';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { MonthlyCollectionDialog } from '@/components/MonthlyCollectionDialog';
 import { 
   IndianRupee, 
   AlertCircle, 
@@ -20,6 +22,7 @@ export default function Dashboard() {
   const { tenants, isLoading, error: tenantsError } = useTenants();
   const { payments, isLoading: paymentsLoading } = usePayments();
 
+  const [collectionDialogOpen, setCollectionDialogOpen] = useState(false);
   const activeTenants = tenants.filter(t => t.is_active);
   const totalPending = activeTenants.reduce((sum, t) => sum + (t.pending_amount || 0), 0);
   const defaulters = activeTenants.filter(t => (t.pending_amount || 0) > 0);
@@ -86,7 +89,10 @@ export default function Dashboard() {
 
         {/* Stats Grid - Removed Extra Balance */}
         <div className="grid gap-4 md:grid-cols-3">
-          <Card>
+          <Card
+            className="cursor-pointer transition-shadow hover:shadow-md"
+            onClick={() => setCollectionDialogOpen(true)}
+          >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Total Collected
@@ -98,7 +104,7 @@ export default function Dashboard() {
                 ₹{totalCollected.toLocaleString('en-IN')}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                This month's collection
+                This month's collection · Tap for history
               </p>
             </CardContent>
           </Card>
@@ -210,6 +216,11 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      <MonthlyCollectionDialog
+        open={collectionDialogOpen}
+        onOpenChange={setCollectionDialogOpen}
+      />
     </Layout>
   );
 }
