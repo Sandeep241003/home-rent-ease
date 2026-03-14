@@ -89,7 +89,10 @@ export default function Dashboard() {
 
         {/* Stats Grid - Removed Extra Balance */}
         <div className="grid gap-4 md:grid-cols-3">
-          <Card>
+          <Card
+            className="cursor-pointer transition-shadow hover:shadow-md"
+            onClick={() => setCollectionDialogOpen(true)}
+          >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Total Collected
@@ -101,7 +104,7 @@ export default function Dashboard() {
                 ₹{totalCollected.toLocaleString('en-IN')}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                This month's collection
+                This month's collection · Tap for history
               </p>
             </CardContent>
           </Card>
