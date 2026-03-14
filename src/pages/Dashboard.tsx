@@ -22,6 +22,7 @@ export default function Dashboard() {
   const { tenants, isLoading, error: tenantsError } = useTenants();
   const { payments, isLoading: paymentsLoading } = usePayments();
 
+  const [collectionDialogOpen, setCollectionDialogOpen] = useState(false);
   const activeTenants = tenants.filter(t => t.is_active);
   const totalPending = activeTenants.reduce((sum, t) => sum + (t.pending_amount || 0), 0);
   const defaulters = activeTenants.filter(t => (t.pending_amount || 0) > 0);
