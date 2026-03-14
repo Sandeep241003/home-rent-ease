@@ -216,6 +216,11 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      <MonthlyCollectionDialog
+        open={collectionDialogOpen}
+        onOpenChange={setCollectionDialogOpen}
+      />
     </Layout>
   );
 }
