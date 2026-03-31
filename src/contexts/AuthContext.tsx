@@ -19,6 +19,51 @@ const AuthContext = createContext<AuthContextType>({
 const BACKEND_URL = import.meta.env.VITE_SUPABASE_URL;
 const PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+const AUTH_STORAGE_KEY_REGEX = /^sb-[a-z0-9]{20}-auth-token$/i;
+
+const isPersistedSession = (value: unknown): value is Session => {
+  if (typeof value !== 'object' || value === null) return false;
+
+  const session = value as Partial<Session>;
+  return (
+    typeof session.access_token === 'string' &&
+    typeof session.refresh_token === 'string' &&
+    typeof session.user === 'object' &&
+    session.user !== null
+  );
+};
+
+const readPersistedSession = (): Session | null => {
+  const storageKeys = new Set<string>();
+
+  if (PROJECT_ID) {
+    storageKeys.add(`sb-${PROJECT_ID}-auth-token`);
+  }
+
+  Object.keys(localStorage).forEach((key) => {
+    if (AUTH_STORAGE_KEY_REGEX.test(key)) {
+      storageKeys.add(key);
+    }
+  });
+
+  for (const key of storageKeys) {
+    const serialized = localStorage.getItem(key);
+    if (!serialized) continue;
+
+    try {
+      const parsed = JSON.parse(serialized);
+      const candidate = parsed?.currentSession ?? parsed?.session ?? parsed;
+
+      if (isPersistedSession(candidate)) {
+        return candidate;
+      }
+    } catch (error) {
+      console.warn('[Auth] Failed to parse cached auth session', { key, error });
+    }
+  }
+
+  return null;
+};
 
 const isNetworkAuthError = (error: unknown): boolean => {
   if (error instanceof Error) {
@@ -86,6 +131,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
+    const cachedSession = readPersistedSession();
+
+    if (cachedSession) {
+      console.info('[Auth] Restored cached session from device storage', {
+        userId: cachedSession.user.id,
+        expiresAt: cachedSession.expires_at,
+      });
+      setSession(cachedSession);
+      setLoading(false);
+    }
+
     if (!BACKEND_URL || !PUBLISHABLE_KEY) {
       console.error('[Auth] Backend client misconfigured', {
         hasBackendUrl: Boolean(BACKEND_URL),
@@ -140,6 +196,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Only clear session on non-network errors (e.g. invalid token)
             clearLocalAuthSession('non-network getSession error');
             setSession(null);
+          } else if (cachedSession) {
+            setSession(cachedSession);
           }
           // On network errors, trust the session already set by onAuthStateChange from localStorage
         } else {
@@ -163,6 +221,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isNetwork) {
           // Network/ISP block: trust the locally cached session instead of wiping it
           console.info('[Auth] Network error – preserving cached session');
+          if (cachedSession) {
+            setSession(cachedSession);
+          }
           // Session was already set by onAuthStateChange from localStorage, keep it
         } else {
           clearLocalAuthSession('session bootstrap non-network failure');
