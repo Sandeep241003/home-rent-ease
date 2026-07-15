@@ -69,7 +69,7 @@ import jsPDF from 'jspdf';
 export default function TenantDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { tenants, updateTenant, updateMembers, applyConcession } = useTenants();
+  const { tenants, updateTenant, updateMembers, applyConcession, addExtraCharge } = useTenants();
   const { payments, addPayment } = usePayments(id);
   const { readings, addReading } = useElectricity(id);
   const { logs } = useActivityLog(id);
