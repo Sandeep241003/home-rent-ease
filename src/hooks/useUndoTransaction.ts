@@ -117,6 +117,41 @@ export function useUndoTransaction() {
         });
       });
 
+      const { data: reversedExtraLogs } = await supabase
+        .from('activity_log')
+        .select('tenant_id, amount, created_at')
+        .eq('event_type', 'EXTRA_CHARGE_REVERSED');
+
+      const reversedExtraKeys = new Set(
+        reversedExtraLogs?.map(r => `${r.tenant_id}|${Math.abs(r.amount || 0)}`) ?? []
+      );
+
+      const { data: extraChargeLogs } = await supabase
+        .from('activity_log')
+        .select('*')
+        .eq('event_type', 'EXTRA_CHARGE_ADDED')
+        .order('created_at', { ascending: false });
+
+      extraChargeLogs?.forEach(e => {
+        const key = `${e.tenant_id}|${Math.abs(e.amount || 0)}`;
+        if (reversedExtraKeys.has(key)) {
+          reversedExtraKeys.delete(key);
+          return;
+        }
+        const tenant = tenantMap.get(e.tenant_id);
+        transactions.push({
+          id: e.id,
+          type: 'EXTRA_CHARGE',
+          tenant_id: e.tenant_id,
+          amount: Math.abs(e.amount || 0),
+          description: e.description,
+          created_at: e.created_at,
+          tenant_name: tenant?.name,
+          room_number: tenant?.room,
+          details: 'Extra charge added',
+        });
+      });
+
       return transactions.sort((a, b) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
