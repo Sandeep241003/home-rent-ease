@@ -302,6 +302,50 @@ export function useTenants() {
     },
   });
 
+  const addExtraCharge = useMutation({
+    mutationFn: async ({ tenantId, amount, reason }: {
+      tenantId: string;
+      amount: number;
+      reason: string;
+    }) => {
+      if (amount <= 0) throw new Error('Amount must be greater than 0');
+      if (!reason.trim()) throw new Error('Reason is required');
+
+      const { data: tenant } = await supabase
+        .from('tenants')
+        .select('room_number, pending_amount')
+        .eq('id', tenantId)
+        .single();
+
+      if (!tenant) throw new Error('Tenant not found');
+
+      const newPending = (tenant.pending_amount || 0) + amount;
+
+      const { error } = await supabase
+        .from('tenants')
+        .update({ pending_amount: newPending })
+        .eq('id', tenantId);
+
+      if (error) throw error;
+
+      await supabase.from('activity_log').insert({
+        tenant_id: tenantId,
+        event_type: 'EXTRA_CHARGE_ADDED',
+        description: `Extra charge of ₹${amount.toLocaleString('en-IN')} added to Room ${tenant.room_number}: ${reason}`,
+        amount: amount,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['activity-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['undoable-transactions'] });
+      toast({ title: 'Extra amount added successfully' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error adding amount', description: error.message, variant: 'destructive' });
+    },
+  });
+
   return {
     tenants: tenantsQuery.data ?? [],
     isLoading: tenantsQuery.isLoading,
@@ -310,6 +354,7 @@ export function useTenants() {
     updateTenant,
     updateMembers,
     applyConcession,
+    addExtraCharge,
     refetch: tenantsQuery.refetch,
   };
 }
