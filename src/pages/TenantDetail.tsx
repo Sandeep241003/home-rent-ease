@@ -132,6 +132,12 @@ export default function TenantDetail() {
   const [concessionAmount, setConcessionAmount] = useState('');
   const [concessionReason, setConcessionReason] = useState('');
 
+  const [extraChargeDialogOpen, setExtraChargeDialogOpen] = useState(false);
+  const [extraChargeAmount, setExtraChargeAmount] = useState('');
+  const [extraChargeReason, setExtraChargeReason] = useState('');
+  const [isSubmittingExtraCharge, setIsSubmittingExtraCharge] = useState(false);
+
+
   const [editTenantDialogOpen, setEditTenantDialogOpen] = useState(false);
 
   const [aadhaarDialogOpen, setAadhaarDialogOpen] = useState(false);
