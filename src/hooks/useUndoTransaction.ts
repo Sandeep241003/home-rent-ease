@@ -2,7 +2,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-export type TransactionType = 'PAYMENT' | 'RENT' | 'ELECTRICITY' | 'CONCESSION';
+export type TransactionType = 'PAYMENT' | 'RENT' | 'ELECTRICITY' | 'CONCESSION' | 'EXTRA_CHARGE';
 
 export interface UndoableTransaction {
   id: string;
