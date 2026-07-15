@@ -1408,6 +1408,77 @@ export default function TenantDetail() {
           </DialogContent>
         </Dialog>
 
+        {/* Extra Charge Dialog */}
+        <Dialog open={extraChargeDialogOpen} onOpenChange={setExtraChargeDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Plus className="h-5 w-5 text-amber-600" />
+                Add Amount
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">Current Pending Amount</p>
+                <p className="text-lg font-semibold">₹{tenant.pending_amount.toLocaleString('en-IN')}</p>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                This will increase the tenant's pending balance. Use for damage, cleaning, maintenance,
+                penalties, or other miscellaneous charges.
+              </p>
+              <div className="space-y-2">
+                <Label>Amount (₹) *</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={extraChargeAmount}
+                  onChange={(e) => setExtraChargeAmount(e.target.value)}
+                  placeholder="Enter amount to add"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Reason *</Label>
+                <Textarea
+                  value={extraChargeReason}
+                  onChange={(e) => setExtraChargeReason(e.target.value)}
+                  placeholder="e.g., Room damage repair, Cleaning charges, Lost key..."
+                  rows={3}
+                />
+              </div>
+              {extraChargeAmount && parseFloat(extraChargeAmount) > 0 && (
+                <div className="p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-sm">
+                  New pending will be{' '}
+                  <span className="font-semibold">
+                    ₹{(tenant.pending_amount + parseFloat(extraChargeAmount)).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setExtraChargeDialogOpen(false)}
+                  className="flex-1"
+                  disabled={isSubmittingExtraCharge}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleExtraCharge}
+                  disabled={
+                    isSubmittingExtraCharge ||
+                    !extraChargeAmount ||
+                    parseFloat(extraChargeAmount) <= 0 ||
+                    !extraChargeReason.trim()
+                  }
+                  className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  {isSubmittingExtraCharge ? 'Adding...' : 'Add Amount'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Aadhaar Dialog */}
         <Dialog open={aadhaarDialogOpen} onOpenChange={setAadhaarDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
