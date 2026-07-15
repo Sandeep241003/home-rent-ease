@@ -445,6 +445,27 @@ export default function TenantDetail() {
     setConcessionReason('');
   };
 
+  const handleExtraCharge = async () => {
+    const amount = parseFloat(extraChargeAmount);
+    if (!amount || amount <= 0 || !extraChargeReason.trim()) return;
+    if (isSubmittingExtraCharge || !addExtraCharge) return;
+
+    setIsSubmittingExtraCharge(true);
+    try {
+      await addExtraCharge.mutateAsync({
+        tenantId: tenant.id,
+        amount,
+        reason: extraChargeReason.trim(),
+      });
+      setExtraChargeDialogOpen(false);
+      setExtraChargeAmount('');
+      setExtraChargeReason('');
+    } finally {
+      setIsSubmittingExtraCharge(false);
+    }
+  };
+
+
   const viewAadhaar = async (member: Member, memberName: string) => {
     if (member.aadhaar_pdf_url) {
       const { data } = await supabase.storage
