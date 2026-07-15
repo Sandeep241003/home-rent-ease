@@ -57,6 +57,7 @@ import {
   Check,
   MoreVertical,
   Percent,
+  Plus,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
