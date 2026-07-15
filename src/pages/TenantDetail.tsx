@@ -661,6 +661,15 @@ export default function TenantDetail() {
                   Apply Concession
                 </DropdownMenuItem>
               )}
+              {tenant.is_active && (
+                <DropdownMenuItem
+                  onClick={() => setExtraChargeDialogOpen(true)}
+                  className="text-amber-600 focus:text-amber-600"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Amount
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               {tenant.is_active ? (
                 <DropdownMenuItem 
