@@ -14,10 +14,12 @@ export type EventType =
   | 'MEMBER_DISCONTINUED'
   | 'MEMBER_UPDATED'
   | 'CONCESSION_APPLIED'
+  | 'EXTRA_CHARGE_ADDED'
   | 'PAYMENT_REVERSED'
   | 'RENT_REVERSED'
   | 'ELECTRICITY_REVERSED'
   | 'CONCESSION_REVERSED'
+  | 'EXTRA_CHARGE_REVERSED'
   | 'TRANSACTION_UNDONE';
 
 export interface ActivityLog {
@@ -37,6 +39,7 @@ export function useActivityLog(tenantId?: string) {
     'RENT_REVERSED', 
     'ELECTRICITY_REVERSED',
     'CONCESSION_REVERSED',
+    'EXTRA_CHARGE_REVERSED',
     'TRANSACTION_UNDONE',
   ];
 

@@ -57,6 +57,7 @@ import {
   Check,
   MoreVertical,
   Percent,
+  Plus,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
@@ -68,7 +69,7 @@ import jsPDF from 'jspdf';
 export default function TenantDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { tenants, updateTenant, updateMembers, applyConcession } = useTenants();
+  const { tenants, updateTenant, updateMembers, applyConcession, addExtraCharge } = useTenants();
   const { payments, addPayment } = usePayments(id);
   const { readings, addReading } = useElectricity(id);
   const { logs } = useActivityLog(id);
@@ -130,6 +131,12 @@ export default function TenantDetail() {
   const [concessionDialogOpen, setConcessionDialogOpen] = useState(false);
   const [concessionAmount, setConcessionAmount] = useState('');
   const [concessionReason, setConcessionReason] = useState('');
+
+  const [extraChargeDialogOpen, setExtraChargeDialogOpen] = useState(false);
+  const [extraChargeAmount, setExtraChargeAmount] = useState('');
+  const [extraChargeReason, setExtraChargeReason] = useState('');
+  const [isSubmittingExtraCharge, setIsSubmittingExtraCharge] = useState(false);
+
 
   const [editTenantDialogOpen, setEditTenantDialogOpen] = useState(false);
 
@@ -438,6 +445,27 @@ export default function TenantDetail() {
     setConcessionReason('');
   };
 
+  const handleExtraCharge = async () => {
+    const amount = parseFloat(extraChargeAmount);
+    if (!amount || amount <= 0 || !extraChargeReason.trim()) return;
+    if (isSubmittingExtraCharge || !addExtraCharge) return;
+
+    setIsSubmittingExtraCharge(true);
+    try {
+      await addExtraCharge.mutateAsync({
+        tenantId: tenant.id,
+        amount,
+        reason: extraChargeReason.trim(),
+      });
+      setExtraChargeDialogOpen(false);
+      setExtraChargeAmount('');
+      setExtraChargeReason('');
+    } finally {
+      setIsSubmittingExtraCharge(false);
+    }
+  };
+
+
   const viewAadhaar = async (member: Member, memberName: string) => {
     if (member.aadhaar_pdf_url) {
       const { data } = await supabase.storage
@@ -631,6 +659,15 @@ export default function TenantDetail() {
                 <DropdownMenuItem onClick={() => setConcessionDialogOpen(true)}>
                   <Percent className="h-4 w-4 mr-2" />
                   Apply Concession
+                </DropdownMenuItem>
+              )}
+              {tenant.is_active && (
+                <DropdownMenuItem
+                  onClick={() => setExtraChargeDialogOpen(true)}
+                  className="text-amber-600 focus:text-amber-600"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Amount
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
@@ -1365,6 +1402,77 @@ export default function TenantDetail() {
                   className="flex-1"
                 >
                   Apply Concession
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Extra Charge Dialog */}
+        <Dialog open={extraChargeDialogOpen} onOpenChange={setExtraChargeDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Plus className="h-5 w-5 text-amber-600" />
+                Add Amount
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-4">
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">Current Pending Amount</p>
+                <p className="text-lg font-semibold">₹{tenant.pending_amount.toLocaleString('en-IN')}</p>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                This will increase the tenant's pending balance. Use for damage, cleaning, maintenance,
+                penalties, or other miscellaneous charges.
+              </p>
+              <div className="space-y-2">
+                <Label>Amount (₹) *</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={extraChargeAmount}
+                  onChange={(e) => setExtraChargeAmount(e.target.value)}
+                  placeholder="Enter amount to add"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Reason *</Label>
+                <Textarea
+                  value={extraChargeReason}
+                  onChange={(e) => setExtraChargeReason(e.target.value)}
+                  placeholder="e.g., Room damage repair, Cleaning charges, Lost key..."
+                  rows={3}
+                />
+              </div>
+              {extraChargeAmount && parseFloat(extraChargeAmount) > 0 && (
+                <div className="p-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-sm">
+                  New pending will be{' '}
+                  <span className="font-semibold">
+                    ₹{(tenant.pending_amount + parseFloat(extraChargeAmount)).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setExtraChargeDialogOpen(false)}
+                  className="flex-1"
+                  disabled={isSubmittingExtraCharge}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleExtraCharge}
+                  disabled={
+                    isSubmittingExtraCharge ||
+                    !extraChargeAmount ||
+                    parseFloat(extraChargeAmount) <= 0 ||
+                    !extraChargeReason.trim()
+                  }
+                  className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  {isSubmittingExtraCharge ? 'Adding...' : 'Add Amount'}
                 </Button>
               </div>
             </div>

@@ -7,7 +7,9 @@ import {
   PiggyBank, 
   ArrowDownUp,
   UserX,
-  UserCheck
+  UserCheck,
+  Gift,
+  Plus,
 } from 'lucide-react';
 import type { ActivityLog } from '@/hooks/useActivityLog';
 
@@ -18,6 +20,8 @@ const eventIcons: Record<string, React.ReactNode> = {
   PAYMENT_RECEIVED: <Banknote className="h-4 w-4" />,
   EXTRA_ADDED: <PiggyBank className="h-4 w-4" />,
   EXTRA_ADJUSTED: <ArrowDownUp className="h-4 w-4" />,
+  CONCESSION_APPLIED: <Gift className="h-4 w-4" />,
+  EXTRA_CHARGE_ADDED: <Plus className="h-4 w-4" />,
   TENANT_DEACTIVATED: <UserX className="h-4 w-4" />,
   TENANT_REACTIVATED: <UserCheck className="h-4 w-4" />,
 };
@@ -29,6 +33,8 @@ const eventColors: Record<string, string> = {
   PAYMENT_RECEIVED: 'bg-green-500',
   EXTRA_ADDED: 'bg-purple-500',
   EXTRA_ADJUSTED: 'bg-indigo-500',
+  CONCESSION_APPLIED: 'bg-purple-500',
+  EXTRA_CHARGE_ADDED: 'bg-amber-500',
   TENANT_DEACTIVATED: 'bg-red-500',
   TENANT_REACTIVATED: 'bg-teal-500',
 };
