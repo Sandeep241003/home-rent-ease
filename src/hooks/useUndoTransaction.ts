@@ -259,6 +259,13 @@ export function useUndoTransaction() {
           logDescription = `Concession undone: ₹${amount.toLocaleString('en-IN')} – ${reason}`;
           break;
         }
+
+        case 'EXTRA_CHARGE': {
+          newPending = Math.max(0, currentPending - amount);
+          eventType = 'EXTRA_CHARGE_REVERSED';
+          logDescription = `Extra charge undone: ₹${amount.toLocaleString('en-IN')} – ${reason}`;
+          break;
+        }
       }
 
       const { error: updateTenantError } = await supabase
