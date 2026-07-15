@@ -39,6 +39,7 @@ export function useActivityLog(tenantId?: string) {
     'RENT_REVERSED', 
     'ELECTRICITY_REVERSED',
     'CONCESSION_REVERSED',
+    'EXTRA_CHARGE_REVERSED',
     'TRANSACTION_UNDONE',
   ];
 
