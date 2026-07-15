@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, Banknote, Home, Zap, Gift } from 'lucide-react';
+import { AlertTriangle, Banknote, Home, Zap, Gift, Plus } from 'lucide-react';
 import { UndoableTransaction, TransactionType } from '@/hooks/useUndoTransaction';
 
 interface UndoTransactionDialogProps {
@@ -29,6 +29,7 @@ const typeIcons: Record<TransactionType, React.ReactNode> = {
   RENT: <Home className="h-4 w-4 text-blue-600" />,
   ELECTRICITY: <Zap className="h-4 w-4 text-yellow-600" />,
   CONCESSION: <Gift className="h-4 w-4 text-purple-600" />,
+  EXTRA_CHARGE: <Plus className="h-4 w-4 text-amber-600" />,
 };
 
 const typeLabels: Record<TransactionType, string> = {
@@ -36,6 +37,7 @@ const typeLabels: Record<TransactionType, string> = {
   RENT: 'Rent',
   ELECTRICITY: 'Electricity',
   CONCESSION: 'Concession',
+  EXTRA_CHARGE: 'Extra Charge',
 };
 
 const typeBadgeVariants: Record<TransactionType, 'default' | 'secondary' | 'outline' | 'destructive'> = {
@@ -43,6 +45,7 @@ const typeBadgeVariants: Record<TransactionType, 'default' | 'secondary' | 'outl
   RENT: 'secondary',
   ELECTRICITY: 'outline',
   CONCESSION: 'secondary',
+  EXTRA_CHARGE: 'outline',
 };
 
 export function UndoTransactionDialog({
