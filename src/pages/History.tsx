@@ -182,6 +182,10 @@ export default function History() {
                 ))}
               </SelectContent>
             </Select>
+            <Button variant="outline" onClick={() => setPdfDialogOpen(true)}>
+              <FileDown className="h-4 w-4 mr-2" />
+              Download Monthly History
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon">
