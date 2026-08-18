@@ -50,6 +50,7 @@ export default function History() {
   const { tenants, isLoading: tenantsLoading } = useTenants();
   const [selectedTenantId, setSelectedTenantId] = useState<string>('all');
   const [undoDialogOpen, setUndoDialogOpen] = useState(false);
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   
   const activeTenants = tenants.filter(t => t.is_active);
 
