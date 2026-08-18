@@ -81,7 +81,7 @@ function eventCells(doc: jsPDF, event: FinancialEvent): Cell[] {
       ? (() => {
           const wrapped = doc.splitTextToSize(event.reason, COLS[3] - 4) as string[];
           const shown = wrapped.slice(0, 2);
-          if (wrapped.length > 2) shown[1] = `${shown[1].trimEnd()}…`;
+          if (wrapped.length > 2) shown[1] = `${shown[1].trimEnd()}...;
           return shown;
         })()
       : [];
