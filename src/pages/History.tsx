@@ -34,7 +34,8 @@ import {
 } from '@/components/ui/table';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { History as HistoryIcon, FileSpreadsheet, PiggyBank, MoreVertical, Undo2 } from 'lucide-react';
+import { History as HistoryIcon, FileSpreadsheet, PiggyBank, MoreVertical, Undo2, FileDown } from 'lucide-react';
+import { MonthlyHistoryPdfDialog } from '@/components/MonthlyHistoryPdfDialog';
 
 interface MonthlyRentEntry {
   id: string;
@@ -49,6 +50,7 @@ export default function History() {
   const { tenants, isLoading: tenantsLoading } = useTenants();
   const [selectedTenantId, setSelectedTenantId] = useState<string>('all');
   const [undoDialogOpen, setUndoDialogOpen] = useState(false);
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   
   const activeTenants = tenants.filter(t => t.is_active);
 
@@ -180,6 +182,10 @@ export default function History() {
                 ))}
               </SelectContent>
             </Select>
+            <Button variant="outline" onClick={() => setPdfDialogOpen(true)}>
+              <FileDown className="h-4 w-4 mr-2" />
+              Download Monthly History
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon">
@@ -322,6 +328,11 @@ export default function History() {
           transactions={transactions}
           onConfirm={handleUndoTransaction}
           isLoading={undoTransaction.isPending}
+        />
+
+        <MonthlyHistoryPdfDialog
+          open={pdfDialogOpen}
+          onOpenChange={setPdfDialogOpen}
         />
       </div>
     </Layout>
