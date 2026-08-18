@@ -30,6 +30,7 @@ const HEADERS = [
 const LINE_H = 3.3;
 const ROW_PAD = 2.4;
 const HEAD_H = 8;
+const CARD_GAP = 5;
 
 const RED: [number, number, number] = [176, 42, 42];
 const GREEN: [number, number, number] = [21, 115, 71];
@@ -77,7 +78,12 @@ function eventCells(doc: jsPDF, event: FinancialEvent): Cell[] {
     const isConcession = event.kind === 'CONCESSION';
     const head = `${isConcession ? '−' : '+'}${inr(event.amount)}`;
     const reasonLines = event.reason
-      ? (doc.splitTextToSize(event.reason, COLS[3] - 4) as string[]).slice(0, 2)
+      ? (() => {
+          const wrapped = doc.splitTextToSize(event.reason, COLS[3] - 4) as string[];
+          const shown = wrapped.slice(0, 2);
+          if (wrapped.length > 2) shown[1] = `${shown[1].trimEnd()}…`;
+          return shown;
+        })()
       : [];
     adjust = {
       lines: [head, ...reasonLines, shortDate(event.date)],
@@ -119,7 +125,7 @@ function cardHeight(rows: PreparedRow[]) {
   const body = rows.length
     ? rows.reduce((sum, r) => sum + r.height, 0)
     : 8;
-  return 9 + HEAD_H + body + 8;
+  return 9 + HEAD_H + body + 8 + CARD_GAP;
 }
 
 function drawText(
@@ -138,7 +144,7 @@ function drawText(
 }
 
 function drawCard(doc: jsPDF, history: TenantMonthHistory, rows: PreparedRow[], top: number) {
-  const height = cardHeight(rows) - 6; // exclude trailing gap from the border
+  const height = cardHeight(rows) - CARD_GAP; // border excludes the gap below the card
   doc.setDrawColor(...RULE);
   doc.setLineWidth(0.2);
   doc.roundedRect(MARGIN, top, CONTENT_W, height, 1.2, 1.2, 'S');
