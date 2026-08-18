@@ -34,7 +34,8 @@ import {
 } from '@/components/ui/table';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { History as HistoryIcon, FileSpreadsheet, PiggyBank, MoreVertical, Undo2 } from 'lucide-react';
+import { History as HistoryIcon, FileSpreadsheet, PiggyBank, MoreVertical, Undo2, FileDown } from 'lucide-react';
+import { MonthlyHistoryPdfDialog } from '@/components/MonthlyHistoryPdfDialog';
 
 interface MonthlyRentEntry {
   id: string;
