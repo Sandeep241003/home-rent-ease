@@ -329,6 +329,11 @@ export default function History() {
           onConfirm={handleUndoTransaction}
           isLoading={undoTransaction.isPending}
         />
+
+        <MonthlyHistoryPdfDialog
+          open={pdfDialogOpen}
+          onOpenChange={setPdfDialogOpen}
+        />
       </div>
     </Layout>
   );
