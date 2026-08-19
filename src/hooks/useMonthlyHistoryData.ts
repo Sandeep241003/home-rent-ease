@@ -27,7 +27,7 @@ export function useMonthlyHistoryData() {
         extraRes,
         extraReversedRes,
       ] = await Promise.all([
-        supabase.from('tenants').select('id, name, room_number'),
+        supabase.from('tenants').select('id, name, room_number, members'),
         supabase
           .from('monthly_rent_entries')
           .select('*')
@@ -61,11 +61,29 @@ export function useMonthlyHistoryData() {
         tenantsRes.error || rentRes.error || elecRes.error || paymentsRes.error;
       if (firstError) throw firstError;
 
-      const tenants: TenantInfo[] = (tenantsRes.data ?? []).map((t) => ({
-        id: t.id,
-        name: t.name,
-        room: t.room_number,
-      }));
+      const tenants: TenantInfo[] = (tenantsRes.data ?? []).map((t) => {
+        const raw = t.members;
+        const parsed = Array.isArray(raw)
+          ? raw
+          : typeof raw === 'string'
+            ? (() => {
+                try {
+                  return JSON.parse(raw);
+                } catch {
+                  return [];
+                }
+              })()
+            : [];
+        const activeMembers = (parsed as { is_active?: boolean }[]).filter(
+          (m) => m && m.is_active !== false,
+        );
+        return {
+          id: t.id,
+          name: t.name,
+          room: t.room_number,
+          memberCount: activeMembers.length || 1,
+        };
+      });
 
       const events: FinancialEvent[] = [];
 
@@ -86,6 +104,14 @@ export function useMonthlyHistoryData() {
           date: e.created_at ?? `${e.reading_date}T00:00:00.000Z`,
           amount: Number(e.bill_amount),
           delta: Number(e.bill_amount),
+          previousReading:
+            e.previous_reading === null || e.previous_reading === undefined
+              ? undefined
+              : Number(e.previous_reading),
+          currentReading:
+            e.current_reading === null || e.current_reading === undefined
+              ? undefined
+              : Number(e.current_reading),
         });
       });
 
