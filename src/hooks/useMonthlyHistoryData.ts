@@ -104,6 +104,14 @@ export function useMonthlyHistoryData() {
           date: e.created_at ?? `${e.reading_date}T00:00:00.000Z`,
           amount: Number(e.bill_amount),
           delta: Number(e.bill_amount),
+          previousReading:
+            e.previous_reading === null || e.previous_reading === undefined
+              ? undefined
+              : Number(e.previous_reading),
+          currentReading:
+            e.current_reading === null || e.current_reading === undefined
+              ? undefined
+              : Number(e.current_reading),
         });
       });
 
