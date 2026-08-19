@@ -27,7 +27,7 @@ export function useMonthlyHistoryData() {
         extraRes,
         extraReversedRes,
       ] = await Promise.all([
-        supabase.from('tenants').select('id, name, room_number'),
+        supabase.from('tenants').select('id, name, room_number, members'),
         supabase
           .from('monthly_rent_entries')
           .select('*')
