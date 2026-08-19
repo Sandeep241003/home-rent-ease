@@ -14,23 +14,17 @@ const FONT = 'DejaVuSans';
 
 const PAGE_W = 210;
 const PAGE_H = 297;
-const MARGIN = 12;
+const MARGIN = 10;
 const CONTENT_W = PAGE_W - MARGIN * 2;
 
-const COLS = [25, 24, 24, 40, 48, 25];
-const HEADERS = [
-  'Pending / Extra Before',
-  'Rent Added',
-  'Electricity Added',
-  'Concession / Extra',
-  'Amount Received',
-  'Pending / Extra After',
-];
+// Date | Description | Amount | Balance
+const COLS = [18, 112, 30, 30];
+const HEADERS = ['Date', 'Description', 'Amount', 'Balance'];
 
-const LINE_H = 3.3;
-const ROW_PAD = 2.4;
-const HEAD_H = 8;
-const CARD_GAP = 5;
+const ROW_H = 4.6;
+const HEAD_H = 5.2;
+const TITLE_H = 5.6;
+const CARD_GAP = 3.2;
 
 const RED: [number, number, number] = [176, 42, 42];
 const GREEN: [number, number, number] = [21, 115, 71];
@@ -43,89 +37,98 @@ function inr(value: number) {
   return `₹${Math.round(Math.abs(value)).toLocaleString('en-IN')}`;
 }
 
+/** Balance display: pending -> ₹X, advance -> +₹X */
+function balanceText(balance: number) {
+  if (balance < 0) return `+${inr(balance)}`;
+  return inr(balance);
+}
+
+function balanceColor(balance: number): [number, number, number] {
+  if (balance < 0) return GREEN;
+  if (balance > 0) return RED;
+  return DARK;
+}
+
 function shortDate(iso: string) {
   const d = new Date(iso);
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 }
 
-interface Cell {
-  lines: string[];
-  color: [number, number, number];
-  boldFirst?: boolean;
+function titleCase(text: string) {
+  return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
 }
 
-const EMPTY: Cell = { lines: ['—'], color: GREY };
-
-function balanceCell(balance: number): Cell {
-  if (balance > 0) return { lines: [inr(balance)], color: RED, boldFirst: true };
-  if (balance < 0) return { lines: [`+${inr(balance)}`], color: GREEN, boldFirst: true };
-  return { lines: ['₹0'], color: DARK, boldFirst: true };
+interface Line {
+  date: string;
+  description: string;
+  amount: string;
+  amountColor: [number, number, number];
+  balance: number;
 }
 
-function eventCells(doc: jsPDF, event: FinancialEvent): Cell[] {
-  const rent: Cell =
-    event.kind === 'RENT'
-      ? { lines: [inr(event.amount), shortDate(event.date)], color: RED, boldFirst: true }
-      : EMPTY;
+function describe(event: FinancialEvent, tenant: TenantInfo): Line {
+  const base = { date: shortDate(event.date), balance: 0 };
 
-  const elec: Cell =
-    event.kind === 'ELECTRICITY'
-      ? { lines: [inr(event.amount), shortDate(event.date)], color: RED, boldFirst: true }
-      : EMPTY;
-
-  let adjust: Cell = EMPTY;
-  if (event.kind === 'CONCESSION' || event.kind === 'EXTRA') {
-    const isConcession = event.kind === 'CONCESSION';
-    const head = `${isConcession ? '−' : '+'}${inr(event.amount)}`;
-    const reasonLines = event.reason
-      ? (() => {
-          const wrapped = doc.splitTextToSize(event.reason, COLS[3] - 4) as string[];
-          const shown = wrapped.slice(0, 2);
-          if (wrapped.length > 2) shown[1] = `${shown[1].trimEnd()}...`;
-          return shown;
-        })()
-      : [];
-    adjust = {
-      lines: [head, ...reasonLines, shortDate(event.date)],
-      color: isConcession ? GREEN : RED,
-      boldFirst: true,
-    };
+  switch (event.kind) {
+    case 'RENT':
+      return {
+        ...base,
+        description: 'Rent added',
+        amount: `+${inr(event.amount)}`,
+        amountColor: RED,
+      };
+    case 'ELECTRICITY': {
+      const hasReadings =
+        event.previousReading !== undefined && event.currentReading !== undefined;
+      return {
+        ...base,
+        description: hasReadings
+          ? `Electricity (${event.previousReading} → ${event.currentReading})`
+          : 'Electricity',
+        amount: `+${inr(event.amount)}`,
+        amountColor: RED,
+      };
+    }
+    case 'CONCESSION':
+      return {
+        ...base,
+        description: event.reason ? `Concession · ${event.reason}` : 'Concession',
+        amount: `−${inr(event.amount)}`,
+        amountColor: GREEN,
+      };
+    case 'EXTRA':
+      return {
+        ...base,
+        description: event.reason ? `Extra · ${event.reason}` : 'Extra charge',
+        amount: `+${inr(event.amount)}`,
+        amountColor: RED,
+      };
+    case 'PAYMENT':
+    default: {
+      const tag = event.paymentReason ? titleCase(event.paymentReason) : 'Payment';
+      const parts = [`${tag} received`];
+      if ((tenant.memberCount ?? 1) > 1 && event.paidBy) parts.push(event.paidBy);
+      if (event.paymentMode) parts.push(event.paymentMode);
+      return {
+        ...base,
+        description: parts.join(' · '),
+        amount: `−${inr(event.amount)}`,
+        amountColor: GREEN,
+      };
+    }
   }
-
-  let received: Cell = EMPTY;
-  if (event.kind === 'PAYMENT') {
-    const tag = (event.paymentReason || 'Payment').toUpperCase();
-    const lines = [`${inr(event.amount)} · ${tag}`];
-    if (event.paidBy) lines.push(event.paidBy);
-    lines.push(`${shortDate(event.date)} · ${event.paymentMode ?? '—'}`);
-    received = { lines, color: GREEN, boldFirst: true };
-  }
-
-  return [rent, elec, adjust, received];
 }
 
-interface PreparedRow {
-  cells: Cell[];
-  height: number;
+function buildLines(history: TenantMonthHistory): Line[] {
+  return history.rows.map(({ after, event }) => ({
+    ...describe(event, history.tenant),
+    balance: after,
+  }));
 }
 
-function prepareRows(doc: jsPDF, history: TenantMonthHistory): PreparedRow[] {
-  return history.rows.map(({ before, after, event }) => {
-    const cells = [
-      balanceCell(before),
-      ...eventCells(doc, event),
-      balanceCell(after),
-    ];
-    const maxLines = Math.max(...cells.map((c) => c.lines.length));
-    return { cells, height: maxLines * LINE_H + ROW_PAD * 2 };
-  });
-}
-
-function cardHeight(rows: PreparedRow[]) {
-  const body = rows.length
-    ? rows.reduce((sum, r) => sum + r.height, 0)
-    : 8;
-  return 9 + HEAD_H + body + 8 + CARD_GAP;
+function cardHeight(lines: Line[]) {
+  const body = lines.length ? lines.length * ROW_H : ROW_H;
+  return TITLE_H + HEAD_H + body + 1.5 + CARD_GAP;
 }
 
 function drawText(
@@ -143,136 +146,172 @@ function drawText(
   doc.text(text, x, y);
 }
 
-function drawCard(doc: jsPDF, history: TenantMonthHistory, rows: PreparedRow[], top: number) {
-  const height = cardHeight(rows) - CARD_GAP; // border excludes the gap below the card
-  doc.setDrawColor(...RULE);
-  doc.setLineWidth(0.2);
-  doc.roundedRect(MARGIN, top, CONTENT_W, height, 1.2, 1.2, 'S');
+function drawRight(
+  doc: jsPDF,
+  text: string,
+  right: number,
+  y: number,
+  bold: boolean,
+  size: number,
+  color: [number, number, number],
+) {
+  doc.setFont(FONT, bold ? 'bold' : 'normal');
+  doc.setFontSize(size);
+  doc.setTextColor(...color);
+  doc.text(text, right - doc.getTextWidth(text), y);
+}
 
-  let y = top + 5.6;
-  drawText(doc, history.tenant.name, MARGIN + 3, y, true, 10, DARK);
+function drawCard(doc: jsPDF, history: TenantMonthHistory, lines: Line[], top: number) {
+  // Card heading: "Name · Room 001" left, "Previous: ₹294" right
+  const headingY = top + 3.8;
+  const name = history.tenant.name;
+  drawText(doc, name, MARGIN, headingY, true, 9, DARK);
   drawText(
     doc,
-    `Room: ${history.tenant.room}`,
-    MARGIN + 3 + doc.getTextWidth(history.tenant.name) + 4,
-    y,
+    `· Room ${history.tenant.room}`,
+    MARGIN + doc.getTextWidth(name) + 2,
+    headingY,
     false,
-    8,
+    7.6,
+    GREY,
+  );
+
+  const prevText = balanceText(history.opening);
+  doc.setFont(FONT, 'bold');
+  doc.setFontSize(7.6);
+  const prevW = doc.getTextWidth(prevText);
+  drawRight(
+    doc,
+    prevText,
+    PAGE_W - MARGIN,
+    headingY,
+    true,
+    7.6,
+    balanceColor(history.opening),
+  );
+  drawRight(
+    doc,
+    'Previous:',
+    PAGE_W - MARGIN - prevW - 1.5,
+    headingY,
+    false,
+    7.2,
     GREY,
   );
 
   // Table header
-  const headTop = top + 9;
+  const headTop = top + TITLE_H;
   doc.setFillColor(...SOFT);
   doc.rect(MARGIN, headTop, CONTENT_W, HEAD_H, 'F');
   doc.setDrawColor(...RULE);
-  doc.line(MARGIN, headTop, MARGIN + CONTENT_W, headTop);
+  doc.setLineWidth(0.2);
+  doc.rect(MARGIN, headTop, CONTENT_W, HEAD_H, 'S');
 
   let x = MARGIN;
   HEADERS.forEach((label, i) => {
-    doc.setFont(FONT, 'bold');
-    doc.setFontSize(6.4);
-    doc.setTextColor(...GREY);
-    const wrapped = doc.splitTextToSize(label, COLS[i] - 3) as string[];
-    wrapped.slice(0, 2).forEach((line, li) => {
-      doc.text(line, x + 2, headTop + 3.4 + li * 2.9);
-    });
+    const baseline = headTop + 3.6;
+    if (i >= 2) {
+      drawRight(doc, label, x + COLS[i] - 2, baseline, true, 6.6, GREY);
+    } else {
+      drawText(doc, label, x + 2, baseline, true, 6.6, GREY);
+    }
     x += COLS[i];
   });
 
-  y = headTop + HEAD_H;
-  doc.line(MARGIN, y, MARGIN + CONTENT_W, y);
+  let y = headTop + HEAD_H;
 
-  if (rows.length === 0) {
-    drawText(doc, 'No financial activity this month', MARGIN + 3, y + 5.2, false, 7.5, GREY);
-    y += 8;
+  if (lines.length === 0) {
+    drawText(doc, 'No financial activity this month', MARGIN + 2, y + 3.2, false, 7, GREY);
+    y += ROW_H;
   } else {
-    rows.forEach((row) => {
-      let cx = MARGIN;
-      row.cells.forEach((cell, i) => {
-        cell.lines.forEach((line, li) => {
-          drawText(
-            doc,
-            line,
-            cx + 2,
-            y + ROW_PAD + 2.4 + li * LINE_H,
-            !!cell.boldFirst && li === 0,
-            li === 0 ? 7.4 : 6.4,
-            li === 0 ? cell.color : GREY,
-          );
-        });
-        cx += COLS[i];
-      });
-      y += row.height;
+    lines.forEach((line) => {
+      const baseline = y + 3.2;
+      drawText(doc, line.date, MARGIN + 2, baseline, false, 7.2, DARK);
+
+      doc.setFont(FONT, 'normal');
+      doc.setFontSize(7.2);
+      let desc = line.description;
+      const maxW = COLS[1] - 4;
+      if (doc.getTextWidth(desc) > maxW) {
+        while (desc.length > 4 && doc.getTextWidth(`${desc}...`) > maxW) {
+          desc = desc.slice(0, -1);
+        }
+        desc = `${desc.trimEnd()}...`;
+      }
+      drawText(doc, desc, MARGIN + COLS[0] + 2, baseline, false, 7.2, DARK);
+
+      const amountRight = MARGIN + COLS[0] + COLS[1] + COLS[2] - 2;
+      drawRight(doc, line.amount, amountRight, baseline, false, 7.2, line.amountColor);
+
+      drawRight(
+        doc,
+        balanceText(line.balance),
+        PAGE_W - MARGIN - 2,
+        baseline,
+        true,
+        7.2,
+        balanceColor(line.balance),
+      );
+
+      y += ROW_H;
       doc.setDrawColor(...RULE);
       doc.line(MARGIN, y, MARGIN + CONTENT_W, y);
     });
   }
-
-  // Footer status
-  const pending = history.closing > 0;
-  const statusValue = history.closing === 0
-    ? '₹0 Pending'
-    : pending
-      ? `${inr(history.closing)} Pending`
-      : `+${inr(history.closing)} Advance`;
-  drawText(doc, 'Final Status:', MARGIN + 3, y + 5.2, false, 7.6, GREY);
-  drawText(
-    doc,
-    statusValue,
-    MARGIN + 3 + doc.getTextWidth('Final Status:') + 2.5,
-    y + 5.2,
-    true,
-    7.8,
-    history.closing < 0 ? GREEN : pending ? RED : DARK,
-  );
 }
 
 function drawReportHeader(doc: jsPDF, label: string) {
-  drawText(doc, 'RENTEASE', MARGIN, MARGIN + 5, true, 16, DARK);
-  drawText(doc, `Monthly History Report — ${label}`, MARGIN, MARGIN + 11, false, 9.5, GREY);
+  drawText(doc, 'RENTEASE', MARGIN, MARGIN + 4, true, 13, DARK);
+  drawRight(
+    doc,
+    `Monthly History Report — ${label}`,
+    PAGE_W - MARGIN,
+    MARGIN + 4,
+    false,
+    8.5,
+    GREY,
+  );
   doc.setDrawColor(...RULE);
   doc.setLineWidth(0.4);
-  doc.line(MARGIN, MARGIN + 14, PAGE_W - MARGIN, MARGIN + 14);
-  return MARGIN + 19;
+  doc.line(MARGIN, MARGIN + 6, PAGE_W - MARGIN, MARGIN + 6);
+  return MARGIN + 9;
 }
 
 function drawSummary(doc: jsPDF, summary: MonthSummary, top: number) {
   const items: { label: string; value: string; color: [number, number, number] }[] = [
-    { label: 'Total Received', value: inr(summary.received), color: GREEN },
-    { label: 'Total Pending', value: inr(summary.pending), color: RED },
-    { label: 'Total Rent Added', value: inr(summary.rent), color: RED },
-    { label: 'Total Electricity Added', value: inr(summary.electricity), color: RED },
-    { label: 'Total Concession', value: inr(summary.concession), color: GREEN },
-    { label: 'Total Extra Amount', value: inr(summary.extra), color: RED },
+    { label: 'Received', value: inr(summary.received), color: GREEN },
+    { label: 'Pending', value: inr(summary.pending), color: RED },
+    { label: 'Rent', value: inr(summary.rent), color: DARK },
+    { label: 'Electricity', value: inr(summary.electricity), color: DARK },
+    { label: 'Concession', value: inr(summary.concession), color: GREEN },
+    { label: 'Extra', value: inr(summary.extra), color: RED },
   ];
 
-  const gap = 2.5;
-  const cardW = (CONTENT_W - gap * 2) / 3;
-  const cardH = 12;
+  const boxH = 7.4;
+  doc.setFillColor(...SOFT);
+  doc.setDrawColor(...RULE);
+  doc.setLineWidth(0.2);
+  doc.roundedRect(MARGIN, top, CONTENT_W, boxH, 1, 1, 'FD');
 
+  const cellW = CONTENT_W / items.length;
   items.forEach((item, i) => {
-    const col = i % 3;
-    const row = Math.floor(i / 3);
-    const x = MARGIN + col * (cardW + gap);
-    const y = top + row * (cardH + gap);
-    doc.setFillColor(...SOFT);
-    doc.setDrawColor(...RULE);
-    doc.setLineWidth(0.2);
-    doc.roundedRect(x, y, cardW, cardH, 1.2, 1.2, 'FD');
-    drawText(doc, item.label, x + 3, y + 4.6, false, 6.8, GREY);
-    drawText(doc, item.value, x + 3, y + 9.6, true, 10, item.color);
+    const cx = MARGIN + i * cellW + 3;
+    const baseline = top + 4.9;
+    drawText(doc, item.label, cx, baseline, false, 7, GREY);
+    const labelW = doc.getTextWidth(item.label);
+    drawText(doc, item.value, cx + labelW + 1.8, baseline, true, 7.6, item.color);
+    if (i > 0) {
+      doc.setDrawColor(...RULE);
+      doc.line(MARGIN + i * cellW, top + 1, MARGIN + i * cellW, top + boxH - 1);
+    }
   });
 
-  return top + 2 * cardH + gap + 6;
+  return top + boxH + 4;
 }
 
 function drawPageFooter(doc: jsPDF, page: number, total: number, label: string) {
-  drawText(doc, `RentEase — ${label}`, MARGIN, PAGE_H - 7, false, 6.6, GREY);
-  const text = `Page ${page} of ${total}`;
-  doc.setFont(FONT, 'normal');
-  doc.setFontSize(6.6);
-  doc.text(text, PAGE_W - MARGIN - doc.getTextWidth(text), PAGE_H - 7);
+  drawText(doc, `RentEase — ${label}`, MARGIN, PAGE_H - 6, false, 6.4, GREY);
+  drawRight(doc, `Page ${page} of ${total}`, PAGE_W - MARGIN, PAGE_H - 6, false, 6.4, GREY);
 }
 
 export interface MonthlyHistoryPdfInput {
@@ -308,19 +347,19 @@ export function buildMonthlyHistoryPdf({
   y = drawSummary(doc, summary, y);
 
   if (histories.length === 0) {
-    drawText(doc, 'No financial activity recorded for this month.', MARGIN, y + 6, false, 9, GREY);
+    drawText(doc, 'No financial activity recorded for this month.', MARGIN, y + 5, false, 9, GREY);
   }
 
-  const bottomLimit = PAGE_H - MARGIN - 6;
+  const bottomLimit = PAGE_H - MARGIN - 5;
 
   histories.forEach((history) => {
-    const rows = prepareRows(doc, history);
-    const height = cardHeight(rows);
+    const lines = buildLines(history);
+    const height = cardHeight(lines);
     if (y + height > bottomLimit) {
       doc.addPage();
       y = MARGIN;
     }
-    drawCard(doc, history, rows, y);
+    drawCard(doc, history, lines, y);
     y += height;
   });
 
