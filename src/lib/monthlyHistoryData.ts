@@ -22,12 +22,17 @@ export interface FinancialEvent {
   paymentMode?: string;
   paymentReason?: string;
   paidBy?: string;
+  /** Electricity meter readings, when stored for that event */
+  previousReading?: number;
+  currentReading?: number;
 }
 
 export interface TenantInfo {
   id: string;
   name: string;
   room: string;
+  /** Number of members sharing the room (used to decide if payer name is shown) */
+  memberCount?: number;
 }
 
 export interface MonthKey {
