@@ -8,6 +8,7 @@ import {
   buildMonthSummary,
   buildTenantMonthHistory,
   monthLabel,
+  MONTH_NAMES,
 } from './monthlyHistoryData';
 
 const FONT = 'DejaVuSans';
@@ -381,6 +382,170 @@ export function buildMonthlyHistoryPdf({
 
 export function downloadMonthlyHistoryPdf(input: MonthlyHistoryPdfInput) {
   const { doc, fileName } = buildMonthlyHistoryPdf(input);
+  doc.save(fileName);
+  return fileName;
+}
+
+/* ------------------------------------------------------------------ *
+ * Tenant-specific history report (range of months)                   *
+ * Reuses the exact same table, typography, colors and calculations.  *
+ * ------------------------------------------------------------------ */
+
+export interface TenantHistoryPdfInput {
+  tenant: TenantInfo;
+  /** Events already scoped to this tenant */
+  events: FinancialEvent[];
+  fromMonth: number;
+  fromYear: number;
+  toMonth: number;
+  toYear: number;
+}
+
+function monthRange(
+  fromMonth: number,
+  fromYear: number,
+  toMonth: number,
+  toYear: number,
+): { month: number; year: number }[] {
+  const out: { month: number; year: number }[] = [];
+  let m = fromMonth;
+  let y = fromYear;
+  let guard = 0;
+  while ((y < toYear || (y === toYear && m <= toMonth)) && guard < 600) {
+    out.push({ month: m, year: y });
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+    guard += 1;
+  }
+  return out;
+}
+
+function sanitize(name: string) {
+  return (
+    name
+      .normalize('NFKD')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'Tenant'
+  );
+}
+
+const SHORT_MONTHS = MONTH_NAMES.map((m) => m.slice(0, 3));
+
+function initPdfDoc() {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  doc.addFileToVFS('DejaVuSans.ttf', DEJAVU_REGULAR_B64);
+  doc.addFont('DejaVuSans.ttf', FONT, 'normal');
+  doc.addFileToVFS('DejaVuSans-Bold.ttf', DEJAVU_BOLD_B64);
+  doc.addFont('DejaVuSans-Bold.ttf', FONT, 'bold');
+  doc.setFont(FONT, 'normal');
+  return doc;
+}
+
+export function buildTenantHistoryPdf({
+  tenant,
+  events,
+  fromMonth,
+  fromYear,
+  toMonth,
+  toYear,
+}: TenantHistoryPdfInput): { doc: jsPDF; fileName: string } {
+  const doc = initPdfDoc();
+  const tenantEvents = events.filter((e) => e.tenantId === tenant.id);
+  const months = monthRange(fromMonth, fromYear, toMonth, toYear);
+
+  const rangeLabel = `${monthLabel(fromMonth, fromYear)} — ${monthLabel(toMonth, toYear)}`;
+
+  // Header (same branding / rule as the monthly report)
+  drawText(doc, 'RENTEASE', MARGIN, MARGIN + 4, true, 13, DARK);
+  drawRight(doc, 'Tenant History Report', PAGE_W - MARGIN, MARGIN + 4, false, 8.5, GREY);
+  doc.setDrawColor(...RULE);
+  doc.setLineWidth(0.4);
+  doc.line(MARGIN, MARGIN + 6, PAGE_W - MARGIN, MARGIN + 6);
+
+  let y = MARGIN + 11;
+  drawText(doc, tenant.name, MARGIN, y, true, 10, DARK);
+  drawText(
+    doc,
+    `· Room ${tenant.room}`,
+    MARGIN + doc.getTextWidth(tenant.name) + 2,
+    y,
+    false,
+    8,
+    GREY,
+  );
+  drawRight(doc, rangeLabel, PAGE_W - MARGIN, y, false, 7.6, GREY);
+  y += 4;
+
+  const bottomLimit = PAGE_H - MARGIN - 5;
+
+  months.forEach(({ month, year }) => {
+    const history = buildTenantMonthHistory(tenant, tenantEvents, month, year);
+    const lines = buildLines(history);
+    const label = monthLabel(month, year);
+
+    let index = 0;
+    let first = true;
+
+    do {
+      const headerBlock = TITLE_H + HEAD_H;
+      let available = bottomLimit - y;
+      // Need at least the heading, table head and one row.
+      if (available < headerBlock + ROW_H + 1.5) {
+        doc.addPage();
+        y = MARGIN;
+        available = bottomLimit - y;
+      }
+
+      const capacity = Math.max(1, Math.floor((available - headerBlock - 1.5) / ROW_H));
+      const chunk = lines.slice(index, index + capacity);
+      index += chunk.length;
+
+      const headingY = y + 3.8;
+      const heading = first ? label : `${label} (continued)`;
+      drawText(doc, heading, MARGIN, headingY, true, 9, DARK);
+      if (first) {
+        const openText = balanceText(history.opening);
+        doc.setFont(FONT, 'bold');
+        doc.setFontSize(7.6);
+        const openW = doc.getTextWidth(openText);
+        drawRight(
+          doc,
+          openText,
+          PAGE_W - MARGIN,
+          headingY,
+          true,
+          7.6,
+          balanceColor(history.opening),
+        );
+        drawRight(doc, 'Opening:', PAGE_W - MARGIN - openW - 1.5, headingY, false, 7.2, GREY);
+      }
+
+      const bottom = drawTable(
+        doc,
+        chunk,
+        y + TITLE_H,
+        'No transactions recorded for this month.',
+      );
+      y = bottom + 1.5 + CARD_GAP;
+      first = false;
+    } while (index < lines.length);
+  });
+
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p += 1) {
+    doc.setPage(p);
+    drawPageFooter(doc, p, totalPages, `${tenant.name} · Room ${tenant.room}`);
+  }
+
+  const fileName = `${sanitize(tenant.name)}-History-${SHORT_MONTHS[fromMonth - 1]}-${fromYear}-to-${SHORT_MONTHS[toMonth - 1]}-${toYear}.pdf`;
+  return { doc, fileName };
+}
+
+export function downloadTenantHistoryPdf(input: TenantHistoryPdfInput) {
+  const { doc, fileName } = buildTenantHistoryPdf(input);
   doc.save(fileName);
   return fileName;
 }
