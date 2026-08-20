@@ -65,6 +65,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import jsPDF from 'jspdf';
+import { TenantHistoryPdfDialog } from '@/components/TenantHistoryPdfDialog';
 
 export default function TenantDetail() {
   const { id } = useParams<{ id: string }>();
@@ -77,6 +78,7 @@ export default function TenantDetail() {
   const { user } = useAuth();
 
   const [showDiscontinuedMembers, setShowDiscontinuedMembers] = useState(false);
+  const [historyPdfDialogOpen, setHistoryPdfDialogOpen] = useState(false);
 
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'UPI' | 'Bank'>('Cash');
@@ -671,6 +673,11 @@ export default function TenantDetail() {
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setHistoryPdfDialogOpen(true)}>
+                <Download className="h-4 w-4 mr-2" />
+                Download History
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               {tenant.is_active ? (
                 <DropdownMenuItem 
                   onClick={() => setDiscontinueDialogOpen(true)}
@@ -687,6 +694,14 @@ export default function TenantDetail() {
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <TenantHistoryPdfDialog
+            open={historyPdfDialogOpen}
+            onOpenChange={setHistoryPdfDialogOpen}
+            tenantId={tenant.id}
+            tenantName={tenant.name}
+            roomNumber={tenant.room_number}
+          />
         </div>
 
         {/* Members Section */}
