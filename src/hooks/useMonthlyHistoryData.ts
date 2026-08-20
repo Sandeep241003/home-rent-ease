@@ -13,10 +13,15 @@ import {
  * History PDF export. Applies the same reversal-exclusion rules the app
  * already uses so undone transactions never show up as completed ones.
  */
-export function useMonthlyHistoryData() {
+export function useMonthlyHistoryData(tenantId?: string) {
   const query = useQuery({
-    queryKey: ['monthly-history-data'],
+    queryKey: ['monthly-history-data', tenantId ?? 'all'],
     queryFn: async () => {
+      // Scope every query to a single tenant when requested (data isolation).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const scope = <T,>(q: T): T =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        tenantId ? ((q as any).eq('tenant_id', tenantId) as T) : q;
       const [
         tenantsRes,
         rentRes,
@@ -27,34 +32,37 @@ export function useMonthlyHistoryData() {
         extraRes,
         extraReversedRes,
       ] = await Promise.all([
-        supabase.from('tenants').select('id, name, room_number, members'),
-        supabase
-          .from('monthly_rent_entries')
-          .select('*')
-          .eq('is_reversed', false),
-        supabase
-          .from('electricity_readings')
-          .select('*')
-          .eq('is_reversed', false),
-        supabase.from('payments').select('*').eq('is_reversed', false),
-        supabase
-          .from('activity_log')
-          .select('*')
-          .eq('event_type', 'CONCESSION_APPLIED')
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('activity_log')
-          .select('tenant_id, amount')
-          .eq('event_type', 'CONCESSION_REVERSED'),
-        supabase
-          .from('activity_log')
-          .select('*')
-          .eq('event_type', 'EXTRA_CHARGE_ADDED')
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('activity_log')
-          .select('tenant_id, amount')
-          .eq('event_type', 'EXTRA_CHARGE_REVERSED'),
+        (() => {
+          const q = supabase.from('tenants').select('id, name, room_number, members');
+          return tenantId ? q.eq('id', tenantId) : q;
+        })(),
+        scope(
+          supabase.from('monthly_rent_entries').select('*').eq('is_reversed', false),
+        ),
+        scope(
+          supabase.from('electricity_readings').select('*').eq('is_reversed', false),
+        ),
+        scope(supabase.from('payments').select('*').eq('is_reversed', false)),
+        scope(
+          supabase
+            .from('activity_log')
+            .select('*')
+            .eq('event_type', 'CONCESSION_APPLIED')
+            .order('created_at', { ascending: false }),
+        ),
+        scope(
+          supabase.from('activity_log').select('tenant_id, amount').eq('event_type', 'CONCESSION_REVERSED'),
+        ),
+        scope(
+          supabase
+            .from('activity_log')
+            .select('*')
+            .eq('event_type', 'EXTRA_CHARGE_ADDED')
+            .order('created_at', { ascending: false }),
+        ),
+        scope(
+          supabase.from('activity_log').select('tenant_id, amount').eq('event_type', 'EXTRA_CHARGE_REVERSED'),
+        ),
       ]);
 
       const firstError =
