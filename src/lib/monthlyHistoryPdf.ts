@@ -161,6 +161,69 @@ function drawRight(
   doc.text(text, right - doc.getTextWidth(text), y);
 }
 
+/** Draws the shared Date | Description | Amount | Balance table. Returns bottom Y. */
+function drawTable(doc: jsPDF, lines: Line[], headTop: number, emptyText: string) {
+  doc.setFillColor(...SOFT);
+  doc.rect(MARGIN, headTop, CONTENT_W, HEAD_H, 'F');
+  doc.setDrawColor(...RULE);
+  doc.setLineWidth(0.2);
+  doc.rect(MARGIN, headTop, CONTENT_W, HEAD_H, 'S');
+
+  let x = MARGIN;
+  HEADERS.forEach((label, i) => {
+    const baseline = headTop + 3.6;
+    if (i >= 2) {
+      drawRight(doc, label, x + COLS[i] - 2, baseline, true, 6.6, GREY);
+    } else {
+      drawText(doc, label, x + 2, baseline, true, 6.6, GREY);
+    }
+    x += COLS[i];
+  });
+
+  let y = headTop + HEAD_H;
+
+  if (lines.length === 0) {
+    drawText(doc, emptyText, MARGIN + 2, y + 3.2, false, 7, GREY);
+    return y + ROW_H;
+  }
+
+  lines.forEach((line) => {
+    const baseline = y + 3.2;
+    drawText(doc, line.date, MARGIN + 2, baseline, false, 7.2, DARK);
+
+    doc.setFont(FONT, 'normal');
+    doc.setFontSize(7.2);
+    let desc = line.description;
+    const maxW = COLS[1] - 4;
+    if (doc.getTextWidth(desc) > maxW) {
+      while (desc.length > 4 && doc.getTextWidth(`${desc}...`) > maxW) {
+        desc = desc.slice(0, -1);
+      }
+      desc = `${desc.trimEnd()}...`;
+    }
+    drawText(doc, desc, MARGIN + COLS[0] + 2, baseline, false, 7.2, DARK);
+
+    const amountRight = MARGIN + COLS[0] + COLS[1] + COLS[2] - 2;
+    drawRight(doc, line.amount, amountRight, baseline, false, 7.2, line.amountColor);
+
+    drawRight(
+      doc,
+      balanceText(line.balance),
+      PAGE_W - MARGIN - 2,
+      baseline,
+      true,
+      7.2,
+      balanceColor(line.balance),
+    );
+
+    y += ROW_H;
+    doc.setDrawColor(...RULE);
+    doc.line(MARGIN, y, MARGIN + CONTENT_W, y);
+  });
+
+  return y;
+}
+
 function drawCard(doc: jsPDF, history: TenantMonthHistory, lines: Line[], top: number) {
   // Card heading: "Name · Room 001" left, "Previous: ₹294" right
   const headingY = top + 3.8;
@@ -199,66 +262,9 @@ function drawCard(doc: jsPDF, history: TenantMonthHistory, lines: Line[], top: n
     GREY,
   );
 
-  // Table header
-  const headTop = top + TITLE_H;
-  doc.setFillColor(...SOFT);
-  doc.rect(MARGIN, headTop, CONTENT_W, HEAD_H, 'F');
-  doc.setDrawColor(...RULE);
-  doc.setLineWidth(0.2);
-  doc.rect(MARGIN, headTop, CONTENT_W, HEAD_H, 'S');
-
-  let x = MARGIN;
-  HEADERS.forEach((label, i) => {
-    const baseline = headTop + 3.6;
-    if (i >= 2) {
-      drawRight(doc, label, x + COLS[i] - 2, baseline, true, 6.6, GREY);
-    } else {
-      drawText(doc, label, x + 2, baseline, true, 6.6, GREY);
-    }
-    x += COLS[i];
-  });
-
-  let y = headTop + HEAD_H;
-
-  if (lines.length === 0) {
-    drawText(doc, 'No financial activity this month', MARGIN + 2, y + 3.2, false, 7, GREY);
-    y += ROW_H;
-  } else {
-    lines.forEach((line) => {
-      const baseline = y + 3.2;
-      drawText(doc, line.date, MARGIN + 2, baseline, false, 7.2, DARK);
-
-      doc.setFont(FONT, 'normal');
-      doc.setFontSize(7.2);
-      let desc = line.description;
-      const maxW = COLS[1] - 4;
-      if (doc.getTextWidth(desc) > maxW) {
-        while (desc.length > 4 && doc.getTextWidth(`${desc}...`) > maxW) {
-          desc = desc.slice(0, -1);
-        }
-        desc = `${desc.trimEnd()}...`;
-      }
-      drawText(doc, desc, MARGIN + COLS[0] + 2, baseline, false, 7.2, DARK);
-
-      const amountRight = MARGIN + COLS[0] + COLS[1] + COLS[2] - 2;
-      drawRight(doc, line.amount, amountRight, baseline, false, 7.2, line.amountColor);
-
-      drawRight(
-        doc,
-        balanceText(line.balance),
-        PAGE_W - MARGIN - 2,
-        baseline,
-        true,
-        7.2,
-        balanceColor(line.balance),
-      );
-
-      y += ROW_H;
-      doc.setDrawColor(...RULE);
-      doc.line(MARGIN, y, MARGIN + CONTENT_W, y);
-    });
-  }
+  drawTable(doc, lines, top + TITLE_H, 'No financial activity this month');
 }
+
 
 function drawReportHeader(doc: jsPDF, label: string) {
   drawText(doc, 'RENTEASE', MARGIN, MARGIN + 4, true, 13, DARK);
