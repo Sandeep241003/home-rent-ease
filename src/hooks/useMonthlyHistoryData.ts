@@ -18,8 +18,10 @@ export function useMonthlyHistoryData(tenantId?: string) {
     queryKey: ['monthly-history-data', tenantId ?? 'all'],
     queryFn: async () => {
       // Scope every query to a single tenant when requested (data isolation).
-      const scope = <T extends { eq: (col: string, val: string) => T }>(q: T): T =>
-        tenantId ? q.eq('tenant_id', tenantId) : q;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const scope = <T,>(q: T): T =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        tenantId ? ((q as any).eq('tenant_id', tenantId) as T) : q;
       const [
         tenantsRes,
         rentRes,
