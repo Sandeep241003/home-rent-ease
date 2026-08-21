@@ -701,6 +701,7 @@ export default function TenantDetail() {
             tenantId={tenant.id}
             tenantName={tenant.name}
             roomNumber={tenant.room_number}
+            joiningDate={tenant.joining_date}
           />
         </div>
 
