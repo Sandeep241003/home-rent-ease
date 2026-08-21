@@ -28,22 +28,40 @@ interface Props {
   tenantId: string;
   tenantName: string;
   roomNumber: string;
+  /** Tenant's joining/start date (YYYY-MM-DD) — first selectable month. */
+  joiningDate?: string | null;
 }
 
-/** Month options: 3 years back through the end of the current year. */
-function buildMonthOptions() {
+/** Months from the tenant's joining month through the current month (newest first). */
+function buildMonthOptions(joiningDate?: string | null) {
   const now = new Date();
   const endYear = now.getFullYear();
-  const startYear = endYear - 3;
+  const endMonth = now.getMonth() + 1;
+
+  let startYear = endYear;
+  let startMonth = endMonth;
+  if (joiningDate) {
+    const parts = String(joiningDate).slice(0, 10).split('-').map(Number);
+    if (parts.length >= 2 && !Number.isNaN(parts[0]) && !Number.isNaN(parts[1])) {
+      startYear = parts[0];
+      startMonth = parts[1];
+    }
+  }
+  // Never start after the current month.
+  if (startYear > endYear || (startYear === endYear && startMonth > endMonth)) {
+    startYear = endYear;
+    startMonth = endMonth;
+  }
+
   const options: { value: string; label: string; month: number; year: number }[] = [];
-  for (let year = startYear; year <= endYear; year += 1) {
-    for (let month = 1; month <= 12; month += 1) {
-      options.push({
-        value: `${year}-${month}`,
-        label: monthLabel(month, year),
-        month,
-        year,
-      });
+  let year = startYear;
+  let month = startMonth;
+  while (year < endYear || (year === endYear && month <= endMonth)) {
+    options.push({ value: `${year}-${month}`, label: monthLabel(month, year), month, year });
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
     }
   }
   return options.reverse();
@@ -55,16 +73,24 @@ export function TenantHistoryPdfDialog({
   tenantId,
   tenantName,
   roomNumber,
+  joiningDate,
 }: Props) {
   const { tenants, events, isLoading } = useMonthlyHistoryData(open ? tenantId : undefined);
   const { toast } = useToast();
   const [generating, setGenerating] = useState(false);
 
-  const options = useMemo(buildMonthOptions, []);
-  const now = new Date();
-  const currentValue = `${now.getFullYear()}-${now.getMonth() + 1}`;
-  const [from, setFrom] = useState(currentValue);
-  const [to, setTo] = useState(currentValue);
+  const options = useMemo(() => buildMonthOptions(joiningDate), [joiningDate]);
+  const defaultValue = options[0]?.value ?? `${new Date().getFullYear()}-${new Date().getMonth() + 1}`;
+  const [from, setFrom] = useState(defaultValue);
+  const [to, setTo] = useState(defaultValue);
+
+  // Keep selections inside the tenant's available range.
+  useEffect(() => {
+    if (!options.some((o) => o.value === from)) setFrom(defaultValue);
+    if (!options.some((o) => o.value === to)) setTo(defaultValue);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [options]);
+
 
   const parse = (value: string) => {
     const [year, month] = value.split('-').map(Number);
