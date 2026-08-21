@@ -520,7 +520,7 @@ export function buildTenantHistoryPdf({
           7.6,
           balanceColor(history.opening),
         );
-        drawRight(doc, 'Opening:', PAGE_W - MARGIN - openW - 1.5, headingY, false, 7.2, GREY);
+        drawRight(doc, 'Pending:', PAGE_W - MARGIN - openW - 1.5, headingY, false, 7.2, GREY);
       }
 
       const bottom = drawTable(
